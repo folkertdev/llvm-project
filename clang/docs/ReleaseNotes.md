@@ -440,6 +440,10 @@ latest release, please see the [Clang Web Site](https://clang.llvm.org) or the
   reproducable builds. These macros can be redefined from the command line if
   necessary. `/d1nodatetime-` can be used to turn this feature off if
   necessary to override the common build settings.
+- `-fcomplex-ppc-gnu-abi` follow ABI ATR-PASS-COMPLEX-IN-GPRS for ppc32 and pass
+  `_Complex` parameters in GPRs like GCC instead of via the stack.
+  For more info check `Power Architecture™ 32-bit ABI Supplement 1.0 - Embedded
+  <https://www.polyomino.org.uk/publications/2011/Power-Arch-32-bit-ABI-supp-1.0-Embedded.pdf>`_
 
 ### Deprecated Compiler Flags
 
