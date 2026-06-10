@@ -155,57 +155,22 @@ MipsSETargetLowering::MipsSETargetLowering(const MipsTargetMachine &TM,
     addMSAFloatType(MVT::v4f32, &Mips::MSA128WRegClass);
     addMSAFloatType(MVT::v2f64, &Mips::MSA128DRegClass);
 
-    // f16 is a storage-only type, always promote it to f32.
-    addRegisterClass(MVT::f16, &Mips::MSA128HRegClass);
-    setOperationAction(ISD::SETCC, MVT::f16, Promote);
-    setOperationAction(ISD::BR_CC, MVT::f16, Promote);
-    setOperationAction(ISD::SELECT_CC, MVT::f16, Promote);
-    setOperationAction(ISD::SELECT, MVT::f16, Promote);
-    setOperationAction(ISD::FADD, MVT::f16, Promote);
-    setOperationAction(ISD::FSUB, MVT::f16, Promote);
-    setOperationAction(ISD::FMUL, MVT::f16, Promote);
-    setOperationAction(ISD::FDIV, MVT::f16, Promote);
-    setOperationAction(ISD::FREM, MVT::f16, Promote);
-    setOperationAction(ISD::FMA, MVT::f16, Promote);
-    setOperationAction(ISD::FNEG, MVT::f16, Promote);
-    setOperationAction(ISD::FABS, MVT::f16, Promote);
-    setOperationAction(ISD::FCEIL, MVT::f16, Promote);
-    setOperationAction(ISD::FCOPYSIGN, MVT::f16, Promote);
-    setOperationAction(ISD::FCOS, MVT::f16, Promote);
-    setOperationAction(ISD::FP_EXTEND, MVT::f16, Promote);
-    setOperationAction(ISD::FFLOOR, MVT::f16, Promote);
-    setOperationAction(ISD::FNEARBYINT, MVT::f16, Promote);
-    setOperationAction(ISD::FPOW, MVT::f16, Promote);
-    setOperationAction(ISD::FPOWI, MVT::f16, Promote);
-    setOperationAction(ISD::FRINT, MVT::f16, Promote);
-    setOperationAction(ISD::FSIN, MVT::f16, Promote);
-    setOperationAction(ISD::FSINCOS, MVT::f16, Promote);
-    setOperationAction(ISD::FSQRT, MVT::f16, Promote);
-    setOperationAction(ISD::FEXP, MVT::f16, Promote);
-    setOperationAction(ISD::FEXP2, MVT::f16, Promote);
-    setOperationAction(ISD::FLOG, MVT::f16, Promote);
-    setOperationAction(ISD::FLOG2, MVT::f16, Promote);
-    setOperationAction(ISD::FLOG10, MVT::f16, Promote);
-    setOperationAction(ISD::FROUND, MVT::f16, Promote);
-    setOperationAction(ISD::FTRUNC, MVT::f16, Promote);
-    setOperationAction(ISD::FMINNUM, MVT::f16, Promote);
-    setOperationAction(ISD::FMAXNUM, MVT::f16, Promote);
-    setOperationAction(ISD::FMINIMUM, MVT::f16, Promote);
-    setOperationAction(ISD::FMAXIMUM, MVT::f16, Promote);
-
-    // Integer <-> Float conversions are keyed on the integer type. Make these
-    // custom so that we can handle the f16 case. Other float types use their
-    // default expansion.
-    setOperationAction(ISD::SINT_TO_FP, MVT::i32, Custom);
-    if (Subtarget.isGP64bit())
-      setOperationAction(ISD::SINT_TO_FP, MVT::i64, Custom);
-
-    setOperationAction(ISD::FP_TO_SINT, MVT::i32, Custom);
-    setOperationAction(ISD::FP_TO_UINT, MVT::i32, Custom);
-    setOperationAction(ISD::FP_TO_SINT, MVT::i64, Custom);
-    setOperationAction(ISD::FP_TO_UINT, MVT::i64, Custom);
-    setOperationAction(ISD::FP_TO_SINT, MVT::i128, Custom);
-    setOperationAction(ISD::FP_TO_UINT, MVT::i128, Custom);
+    // f16 is not a legal scalar type; it is soft-promoted to f32 by the generic
+    // legalizer (see TargetLoweringBase::computeRegisterProperties). This keeps
+    // the f16 ABI and all f16 arithmetic identical to the non-MSA case (f16 is
+    // passed as a 16-bit integer in a GPR and operations are promoted to f32).
+    //
+    // The only thing MSA buys us over the soft-promote default is hardware
+    // conversion between f16 and f32/f64 via the fexupr/fexdo instructions, so
+    // custom lower the conversion nodes that the soft-promote legalizer emits.
+    // Everything else (loads, stores, arithmetic, int <-> f16 conversions) is
+    // expressed in terms of these and handled generically.
+    for (MVT VT : {MVT::f32, MVT::f64}) {
+      setOperationAction(ISD::FP16_TO_FP, VT, Custom);
+      setOperationAction(ISD::FP_TO_FP16, VT, Custom);
+      setOperationAction(ISD::STRICT_FP16_TO_FP, VT, Custom);
+      setOperationAction(ISD::STRICT_FP_TO_FP16, VT, Custom);
+    }
 
     setTargetDAGCombine({ISD::AND, ISD::OR, ISD::SRA, ISD::VSELECT, ISD::XOR});
   }
@@ -529,45 +494,91 @@ SDValue MipsSETargetLowering::lowerSELECT(SDValue Op, SelectionDAG &DAG) const {
                      Op->getOperand(2));
 }
 
-SDValue MipsSETargetLowering::lowerINT_TO_FP(SDValue Op,
-                                             SelectionDAG &DAG) const {
-  // The f32/f64 case is already legal.
-  if (Op.getValueType() != MVT::f16)
-    return Op;
-
-  // For f16, first convert the integer to f32, then convert to f16.
+// Lower an FP16_TO_FP node (the soft-promote-half representation of an f16 ->
+// f32/f64 conversion) using the MSA fexupr.w / fexupr.d instructions.
+//
+// The 16-bit half pattern is held in the low bits of an integer operand. We
+// splat it across a v8f16 vector and up-convert with fexupr; because the value
+// is replicated into every lane it does not matter which lane fexupr reads.
+SDValue MipsSETargetLowering::lowerFP16_TO_FP(SDValue Op,
+                                              SelectionDAG &DAG) const {
   SDLoc DL(Op);
-  SDValue FP = DAG.getNode(Op.getOpcode(), DL, MVT::f32, Op.getOperand(0));
-  return DAG.getFPExtendOrRound(FP, DL, MVT::f16);
-}
+  bool IsStrict = Op->isStrictFPOpcode();
+  EVT ResTy = Op.getValueType();
+  assert((ResTy == MVT::f32 || ResTy == MVT::f64) && "Unexpected FP16_TO_FP");
 
-SDValue MipsSETargetLowering::lowerFP_TO_INT(SDValue Op,
-                                             SelectionDAG &DAG) const {
-  SDValue InOp = Op.getOperand(0);
+  // Bring the half bit-pattern into an i32 and splat it across a v8i16, then
+  // reinterpret as v8f16.
+  SDValue In = Op.getOperand(IsStrict ? 1 : 0);
+  if (In.getValueType() != MVT::i32)
+    In = DAG.getNode(In.getValueType().bitsGT(MVT::i32) ? ISD::TRUNCATE
+                                                        : ISD::ANY_EXTEND,
+                     DL, MVT::i32, In);
+  SmallVector<SDValue, 8> Elts(8, In);
+  SDValue HVec = DAG.getNode(ISD::BITCAST, DL, MVT::v8f16,
+                             DAG.getBuildVector(MVT::v8i16, DL, Elts));
 
-  // For f16, first convert to f32 and go from there.
-  if (InOp.getValueType() == MVT::f16) {
-    EVT VT = Op.getValueType();
-
-    assert((VT == MVT::i32 || VT == MVT::i64 || VT == MVT::i128) &&
-           "Unexpected result type for f16 -> integer conversion");
-
-    SDLoc DL(Op);
-    SDValue FP = DAG.getFPExtendOrRound(InOp, DL, MVT::f32);
-
-    // Use a trick from TargetLowering::expandFP_TO_UINT: we know that every
-    // integer value that can be represented by f16 is representable by i32, so
-    // fptoui and fptosi are equivalent.
-    //
-    // NOTE: the result of fptoui is poison when the value does not fit in the
-    // destination type (e.g. because it is negative).
-    return DAG.getNode(ISD::FP_TO_SINT, DL, VT, FP);
+  // f16 -> f32 via fexupr.w (and -> f64 via fexupr.d). The MSA conversion
+  // instructions do not raise exceptions we model, so a STRICT_ conversion is
+  // lowered identically and simply forwards the incoming chain.
+  SDValue F32Vec =
+      DAG.getNode(ISD::INTRINSIC_WO_CHAIN, DL, MVT::v4f32,
+                  DAG.getConstant(Intrinsic::mips_fexupr_w, DL, MVT::i32), HVec);
+  SDValue Res;
+  if (ResTy == MVT::f32) {
+    Res = DAG.getNode(ISD::EXTRACT_VECTOR_ELT, DL, MVT::f32, F32Vec,
+                      DAG.getVectorIdxConstant(0, DL));
+  } else {
+    SDValue F64Vec = DAG.getNode(
+        ISD::INTRINSIC_WO_CHAIN, DL, MVT::v2f64,
+        DAG.getConstant(Intrinsic::mips_fexupr_d, DL, MVT::i32), F32Vec);
+    Res = DAG.getNode(ISD::EXTRACT_VECTOR_ELT, DL, MVT::f64, F64Vec,
+                      DAG.getVectorIdxConstant(0, DL));
   }
 
-  // Use the default lowering for f32/f64.
-  if (!isTypeLegal(Op.getValueType()))
-    return SDValue();
-  return MipsTargetLowering::LowerOperation(Op, DAG);
+  if (IsStrict)
+    return DAG.getMergeValues({Res, Op.getOperand(0)}, DL);
+  return Res;
+}
+
+// Lower an FP_TO_FP16 node (the soft-promote-half representation of an
+// f32/f64 -> f16 conversion) using the MSA fexdo.w / fexdo.h instructions.
+//
+// The source value is splatted across a vector and down-converted with fexdo;
+// the resulting half bit-pattern is read out of lane 0 as an integer.
+SDValue MipsSETargetLowering::lowerFP_TO_FP16(SDValue Op,
+                                              SelectionDAG &DAG) const {
+  SDLoc DL(Op);
+  bool IsStrict = Op->isStrictFPOpcode();
+  EVT ResTy = Op.getValueType();
+  SDValue In = Op.getOperand(IsStrict ? 1 : 0);
+  assert((In.getValueType() == MVT::f32 || In.getValueType() == MVT::f64) &&
+         "Unexpected FP_TO_FP16");
+
+  // Get the source into a v4f32, down-converting from f64 via fexdo.w first.
+  SDValue F32Vec;
+  if (In.getValueType() == MVT::f64) {
+    SDValue F64Vec = DAG.getSplatBuildVector(MVT::v2f64, DL, In);
+    F32Vec = DAG.getNode(
+        ISD::INTRINSIC_WO_CHAIN, DL, MVT::v4f32,
+        DAG.getConstant(Intrinsic::mips_fexdo_w, DL, MVT::i32), F64Vec, F64Vec);
+  } else {
+    F32Vec = DAG.getSplatBuildVector(MVT::v4f32, DL, In);
+  }
+
+  // f32 -> f16 via fexdo.h, then read lane 0 as the integer half pattern. As
+  // with FP16_TO_FP, a STRICT_ conversion is lowered identically and forwards
+  // the incoming chain.
+  SDValue HVec = DAG.getNode(
+      ISD::INTRINSIC_WO_CHAIN, DL, MVT::v8f16,
+      DAG.getConstant(Intrinsic::mips_fexdo_h, DL, MVT::i32), F32Vec, F32Vec);
+  SDValue IVec = DAG.getNode(ISD::BITCAST, DL, MVT::v8i16, HVec);
+  SDValue Res = DAG.getNode(ISD::EXTRACT_VECTOR_ELT, DL, ResTy, IVec,
+                            DAG.getVectorIdxConstant(0, DL));
+
+  if (IsStrict)
+    return DAG.getMergeValues({Res, Op.getOperand(0)}, DL);
+  return Res;
 }
 
 bool MipsSETargetLowering::allowsMisalignedMemoryAccesses(
@@ -617,11 +628,10 @@ SDValue MipsSETargetLowering::LowerOperation(SDValue Op,
   case ISD::BUILD_VECTOR:       return lowerBUILD_VECTOR(Op, DAG);
   case ISD::VECTOR_SHUFFLE:     return lowerVECTOR_SHUFFLE(Op, DAG);
   case ISD::SELECT:             return lowerSELECT(Op, DAG);
-  case ISD::SINT_TO_FP:
-    return lowerINT_TO_FP(Op, DAG);
-  case ISD::FP_TO_SINT:
-  case ISD::FP_TO_UINT:
-    return lowerFP_TO_INT(Op, DAG);
+  case ISD::FP16_TO_FP:
+  case ISD::STRICT_FP16_TO_FP:  return lowerFP16_TO_FP(Op, DAG);
+  case ISD::FP_TO_FP16:
+  case ISD::STRICT_FP_TO_FP16:  return lowerFP_TO_FP16(Op, DAG);
   case ISD::BITCAST:            return lowerBITCAST(Op, DAG);
   case ISD::FADD:
     return lowerR5900FPOp(Op, DAG, RTLIB::ADD_F32);
