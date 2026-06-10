@@ -172,7 +172,8 @@ MipsSETargetLowering::MipsSETargetLowering(const MipsTargetMachine &TM,
       setOperationAction(ISD::STRICT_FP_TO_FP16, VT, Custom);
     }
 
-    setTargetDAGCombine({ISD::AND, ISD::OR, ISD::SRA, ISD::VSELECT, ISD::XOR});
+    setTargetDAGCombine({ISD::AND, ISD::OR, ISD::SRA, ISD::VSELECT, ISD::XOR,
+                         ISD::FP_TO_UINT});
   }
 
   if (!Subtarget.useSoftFloat()) {
@@ -1218,12 +1219,31 @@ static SDValue performXORCombine(SDNode *N, SelectionDAG &DAG,
   return SDValue();
 }
 
+// Convert (fp_to_uint (fp16_to_fp x)) into (fp_to_sint (fp16_to_fp x)).
+//
+// Every finite f16 value has magnitude <= 65504, which fits in a signed integer
+// of 17 bits or more, so for such results the unsigned and signed conversions
+// are equivalent. Negative inputs are out of the unsigned range and hence
+// poison for fptoui, so emitting the signed conversion is a valid refinement.
+// This lets f16 -> unsigned conversions use the cheap trunc.w.s sequence
+// instead of the generic (and much larger) fptoui expansion.
+static SDValue performFP_TO_UINTCombine(SDNode *N, SelectionDAG &DAG) {
+  SDValue Src = N->getOperand(0);
+  EVT VT = N->getValueType(0);
+  if (Src.getOpcode() != ISD::FP16_TO_FP || VT.getScalarSizeInBits() < 17)
+    return SDValue();
+  return DAG.getNode(ISD::FP_TO_SINT, SDLoc(N), VT, Src);
+}
+
 SDValue
 MipsSETargetLowering::PerformDAGCombine(SDNode *N, DAGCombinerInfo &DCI) const {
   SelectionDAG &DAG = DCI.DAG;
   SDValue Val;
 
   switch (N->getOpcode()) {
+  case ISD::FP_TO_UINT:
+    Val = performFP_TO_UINTCombine(N, DAG);
+    break;
   case ISD::AND:
     Val = performANDCombine(N, DAG, DCI, Subtarget);
     break;
