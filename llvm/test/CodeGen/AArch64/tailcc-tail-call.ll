@@ -229,4 +229,42 @@ define tailcc void @fromtail_toC() #0 {
   ret void
 }
 
+define tailcc noundef i64 @call_with_byval_caller(i64 noundef %a, i64 noundef %d) {
+; SDAG-LABEL: call_with_byval_caller:
+; SDAG:       // %bb.0: // %start
+; SDAG-NEXT:    mov x8, #-4919131752989213765 // =0xbbbbbbbbbbbbbbbb
+; SDAG-NEXT:    stp x0, x8, [sp, #-64]!
+; SDAG-NEXT:    .cfi_def_cfa_offset 64
+; SDAG-NEXT:    mov x9, #-3689348814741910324 // =0xcccccccccccccccc
+; SDAG-NEXT:    stp x9, x1, [sp, #16]
+; SDAG-NEXT:    ldp q1, q0, [sp]
+; SDAG-NEXT:    stp q1, q0, [sp, #32]!
+; SDAG-NEXT:    b call_with_byval_callee
+;
+; GISEL-LABEL: call_with_byval_caller:
+; GISEL:       // %bb.0: // %start
+; GISEL-NEXT:    mov x8, #-4919131752989213765 // =0xbbbbbbbbbbbbbbbb
+; GISEL-NEXT:    stp x0, x8, [sp, #-64]!
+; GISEL-NEXT:    .cfi_def_cfa_offset 64
+; GISEL-NEXT:    mov x9, #-3689348814741910324 // =0xcccccccccccccccc
+; GISEL-NEXT:    stp x9, x1, [sp, #16]
+; GISEL-NEXT:    ldp q1, q0, [sp]
+; GISEL-NEXT:    stp q1, q0, [sp, #32]!
+; GISEL-NEXT:    b call_with_byval_callee
+start:
+  %large = alloca [32 x i8], align 8
+  call void @llvm.lifetime.start.p0(ptr nonnull %large)
+  store i64 %a, ptr %large, align 8
+  %0 = getelementptr inbounds nuw i8, ptr %large, i64 8
+  store i64 -4919131752989213765, ptr %0, align 8
+  %1 = getelementptr inbounds nuw i8, ptr %large, i64 16
+  store i64 -3689348814741910324, ptr %1, align 8
+  %2 = getelementptr inbounds nuw i8, ptr %large, i64 24
+  store i64 %d, ptr %2, align 8
+  %3 = musttail call tailcc i64 @call_with_byval_callee(ptr byval([32 x i8]) %large)
+  ret i64 %3
+}
+
+declare tailcc noundef i64 @call_with_byval_callee(ptr byval([32 x i8]) %large)
+
 attributes #0 = { uwtable }
