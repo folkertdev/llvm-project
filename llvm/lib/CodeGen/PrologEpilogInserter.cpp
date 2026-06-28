@@ -776,9 +776,12 @@ static inline void computeFreeStackSlots(MachineFrameInfo &MFI,
       ObjStart = ObjOffset;
       ObjEnd = ObjOffset + ObjSize;
     }
-    // Ignore fixed holes that are in the previous stack frame.
+    // Ignore fixed holes that are in the previous stack frame. An object may
+    // straddle the frame boundary (e.g. a tail call's outgoing-argument slot at
+    // a negative offset but large enough to extend past zero), so only mark the
+    // portion that lies within the tracked range.
     if (ObjEnd > 0)
-      StackBytesFree.reset(ObjStart, ObjEnd);
+      StackBytesFree.reset(std::max(ObjStart, 0), ObjEnd);
   }
 }
 
