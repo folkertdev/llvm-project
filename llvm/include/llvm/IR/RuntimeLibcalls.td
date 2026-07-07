@@ -27,6 +27,8 @@ def isPS : RuntimeLibcallPredicate<"TT.isPS()">;
 def isMacOSX : RuntimeLibcallPredicate<[{TT.isMacOSX()}]>;
 def isNotOSWindowsOrIsCygwinMinGW
   : RuntimeLibcallPredicate<"!TT.isOSWindows() || TT.isOSCygMing()">;
+def isOSWindowsExceptCygwinMinGW
+  : RuntimeLibcallPredicate<"TT.isOSWindows() && !TT.isOSCygMing()">;
 
 def isWindowsMSVCEnvironment : RuntimeLibcallPredicate<
   [{TT.isWindowsMSVCEnvironment()}]>;
@@ -1894,6 +1896,9 @@ defvar LibmHasLdexpF80 = LibcallImpls<(add ldexpl_f80), isNotOSWindowsOrIsCygwin
 defvar LibmHasFrexpF128 = LibcallImpls<(add frexpl_f128), isNotOSWindowsOrIsCygwinMinGW>;
 defvar LibmHasLdexpF128 = LibcallImpls<(add ldexpl_f128), isNotOSWindowsOrIsCygwinMinGW>;
 
+defvar LibmHasFrexpF128MSVC = LibcallImpls<(add frexpf128), isOSWindowsExceptCygwinMinGW>;
+defvar LibmHasLdexpF128MSVC = LibcallImpls<(add ldexpf128), isOSWindowsExceptCygwinMinGW>;
+
 defvar has__stack_chk_fail = LibcallImpls<(add __stack_chk_fail), hasStackChkFail>;
 defvar has__stack_chk_guard =
     LibcallImpls<(add __stack_chk_guard), hasStackChkFail>;
@@ -2009,6 +2014,7 @@ def AArch64SystemLibrary : SystemRuntimeLibrary<
        LibcallImpls<(add __powisf2, __powidf2), isNotOSMSVCRT>,
        LibmHasFrexpF32, LibmHasLdexpF32,
        LibmHasFrexpF128, LibmHasLdexpF128,
+       LibmHasFrexpF128MSVC, LibmHasLdexpF128MSVC,
        AArch64LibcallImpls,
        LibcallImpls<(add Int128RTLibcalls), isAArch64_ILP64>,
        LibcallImpls<(add bzero), isOSDarwin>,
@@ -2503,6 +2509,7 @@ def ARMSystemLibrary
            LibcallImpls<(add __powisf2, __powidf2), isNotOSMSVCRT>,
            LibmHasFrexpF32, LibmHasLdexpF32,
            LibmHasFrexpF128, LibmHasLdexpF128,
+           LibmHasFrexpF128MSVC, LibmHasLdexpF128MSVC,
            WindowARMDivRemCalls,
            WindowARMFPIntCasts,
            SecurityCheckCookieIfWinMSVC,
@@ -3215,8 +3222,20 @@ def darwinHas__bzero : RuntimeLibcallPredicate<"TT.isMacOSX() && !TT.isMacOSXVer
 def hasExpFrexplLdexplF128
   : RuntimeLibcallPredicate<[{(!TT.isOSWindows() || TT.isOSCygMing()) && !TT.isGNUEnvironment()}]>;
 
+def isGNUEnvironmentOrOSWindowsExceptCygwinMinGW
+  : RuntimeLibcallPredicate<"TT.isGNUEnvironment() || (TT.isOSWindows() && !TT.isOSCygMing())">;
+
 // Use the f128 variants of math functions on x86
-defvar X86_F128_Libcalls = LibcallImpls<(add LibmF128Libcalls, LibmF128FiniteLibcalls), isGNUEnvironment>;
+defvar X86_F128_Libcalls =
+  LibcallImpls<(add (sub LibmF128Libcalls, frexpf128, ldexpf128),
+                    LibmF128FiniteLibcalls), isGNUEnvironment>;
+
+// ldexpf128/frexpf128 don't exist in the MSVC CRT, but emitting them (turning an
+// unlowerable f128 ldexp/frexp into a link error) is preferable to calling the
+// wrong ldexpl/frexpl, which operate on double-precision long double.
+defvar X86_LdexpFrexp_F128_Libcalls =
+  LibcallImpls<(add frexpf128, ldexpf128),
+               isGNUEnvironmentOrOSWindowsExceptCygwinMinGW>;
 
 defvar SinCosF32F64Libcalls = LibcallImpls<(add sincosf, sincos), hasSinCos_f32_f64>;
 
@@ -3226,6 +3245,7 @@ defvar X86CommonLibcalls =
   (add (sub WinDefaultLibcallImpls, WindowsDivRemMulLibcallOverrides, MemChkLibcalls),
        DarwinSinCosStret, DarwinExp10, DarwinMemsetPattern, MacOSUnlockedIO,
        X86_F128_Libcalls,
+       X86_LdexpFrexp_F128_Libcalls,
        LibmHasSinCosF80, // FIXME: Depends on long double
        SinCosF32F64Libcalls,
        LibcallImpls<(add __bzero), darwinHas__bzero>,
