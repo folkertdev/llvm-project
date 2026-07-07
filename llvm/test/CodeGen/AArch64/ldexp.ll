@@ -365,3 +365,24 @@ entry:
   %0 = tail call fast bfloat @llvm.ldexp.bf16.i32(bfloat %val, i32 %a)
   ret bfloat %0
 }
+
+define fp128 @testExpf128(fp128 %val, i32 %a) {
+; SVELINUX-LABEL: testExpf128:
+; SVELINUX:       // %bb.0: // %entry
+; SVELINUX-NEXT:    b ldexpl
+;
+; GISEL-LABEL: testExpf128:
+; GISEL:       // %bb.0: // %entry
+; GISEL-NEXT:    b ldexpl
+;
+; SVEWINDOWS-LABEL: testExpf128:
+; SVEWINDOWS:       // %bb.0: // %entry
+; SVEWINDOWS-NEXT:    b ldexpf128
+;
+; WINDOWS-LABEL: testExpf128:
+; WINDOWS:       // %bb.0: // %entry
+; WINDOWS-NEXT:    b ldexpf128
+entry:
+  %ldexp = call fp128 @llvm.ldexp.f128.i32(fp128 %val, i32 %a)
+  ret fp128 %ldexp
+}

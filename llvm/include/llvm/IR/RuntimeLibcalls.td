@@ -27,6 +27,8 @@ def isPS : RuntimeLibcallPredicate<"TT.isPS()">;
 def isMacOSX : RuntimeLibcallPredicate<[{TT.isMacOSX()}]>;
 def isNotOSWindowsOrIsCygwinMinGW
   : RuntimeLibcallPredicate<"!TT.isOSWindows() || TT.isOSCygMing()">;
+def isOSWindowsExceptCygwinMinGW
+  : RuntimeLibcallPredicate<"TT.isOSWindows() && !TT.isOSCygMing()">;
 
 def isWindowsMSVCEnvironment : RuntimeLibcallPredicate<
   [{TT.isWindowsMSVCEnvironment()}]>;
@@ -1894,6 +1896,13 @@ defvar LibmHasLdexpF80 = LibcallImpls<(add ldexpl_f80), isNotOSWindowsOrIsCygwin
 defvar LibmHasFrexpF128 = LibcallImpls<(add frexpl_f128), isNotOSWindowsOrIsCygwinMinGW>;
 defvar LibmHasLdexpF128 = LibcallImpls<(add ldexpl_f128), isNotOSWindowsOrIsCygwinMinGW>;
 
+// frexp/ldexp f128 are provided as `*l` by the base, which is wrong on
+// Windows-MSVC (long double == double). Use the `*f128` spelling there: it isn't
+// in the CRT, so an unlowered call becomes a link error instead of a silent
+// double-precision miscompile.
+defvar LibmHasFrexpF128MSVC = LibcallImpls<(add frexpf128), isOSWindowsExceptCygwinMinGW>;
+defvar LibmHasLdexpF128MSVC = LibcallImpls<(add ldexpf128), isOSWindowsExceptCygwinMinGW>;
+
 defvar has__stack_chk_fail = LibcallImpls<(add __stack_chk_fail), hasStackChkFail>;
 defvar has__stack_chk_guard =
     LibcallImpls<(add __stack_chk_guard), hasStackChkFail>;
@@ -2009,6 +2018,7 @@ def AArch64SystemLibrary : SystemRuntimeLibrary<
        LibcallImpls<(add __powisf2, __powidf2), isNotOSMSVCRT>,
        LibmHasFrexpF32, LibmHasLdexpF32,
        LibmHasFrexpF128, LibmHasLdexpF128,
+       LibmHasFrexpF128MSVC, LibmHasLdexpF128MSVC,
        AArch64LibcallImpls,
        LibcallImpls<(add Int128RTLibcalls), isAArch64_ILP64>,
        LibcallImpls<(add bzero), isOSDarwin>,
@@ -2503,6 +2513,7 @@ def ARMSystemLibrary
            LibcallImpls<(add __powisf2, __powidf2), isNotOSMSVCRT>,
            LibmHasFrexpF32, LibmHasLdexpF32,
            LibmHasFrexpF128, LibmHasLdexpF128,
+           LibmHasFrexpF128MSVC, LibmHasLdexpF128MSVC,
            WindowARMDivRemCalls,
            WindowARMFPIntCasts,
            SecurityCheckCookieIfWinMSVC,
@@ -3211,12 +3222,23 @@ def isWin64NotCygMing : RuntimeLibcallPredicate<
 // Some darwins have an optimized __bzero/bzero function.
 def darwinHas__bzero : RuntimeLibcallPredicate<"TT.isMacOSX() && !TT.isMacOSXVersionLT(10, 6)">;
 
-// FIXME: This is has ldexpl/frexpl plus use f128 for long double.
+// f128 frexp/ldexp come in two spellings: non-GNU non-Windows libms (musl, BSD,
+// Darwin) provide the `*l` names, while glibc and Windows-MSVC use the `*f128`
+// names. On Windows-MSVC the `*f128` names aren't in the CRT, but emitting them
+// turns a silent double-precision miscompile (via the base `*l` impls) into a
+// link error. These two predicates are exact complements (the framework has no
+// way to negate one).
 def hasExpFrexplLdexplF128
   : RuntimeLibcallPredicate<[{(!TT.isOSWindows() || TT.isOSCygMing()) && !TT.isGNUEnvironment()}]>;
+def isGNUEnvironmentOrOSWindowsExceptCygwinMinGW // complement of the above
+  : RuntimeLibcallPredicate<"TT.isGNUEnvironment() || (TT.isOSWindows() && !TT.isOSCygMing())">;
 
-// Use the f128 variants of math functions on x86
-defvar X86_F128_Libcalls = LibcallImpls<(add LibmF128Libcalls, LibmF128FiniteLibcalls), isGNUEnvironment>;
+// Use the f128 variants of math functions on x86. frexp/ldexp are subtracted and
+// handled by the complementary pair below, so they can also be provided on
+// Windows-MSVC rather than glibc only.
+defvar X86_F128_Libcalls =
+  LibcallImpls<(add (sub LibmF128Libcalls, frexpf128, ldexpf128),
+                    LibmF128FiniteLibcalls), isGNUEnvironment>;
 
 defvar SinCosF32F64Libcalls = LibcallImpls<(add sincosf, sincos), hasSinCos_f32_f64>;
 
@@ -3231,7 +3253,11 @@ defvar X86CommonLibcalls =
        LibcallImpls<(add __bzero), darwinHas__bzero>,
        LibmHasFrexpF32, LibmHasLdexpF32,
        LibmHasFrexpF80, LibmHasLdexpF80,
+       // f128 frexp/ldexp: `*l` spelling vs `*f128` spelling, per target (the two
+       // predicates are complements). exp10l rides the `*l` side; exp10's f128
+       // form stays in X86_F128_Libcalls.
        LibcallImpls<(add frexpl_f128, ldexpl_f128, exp10l_f128), hasExpFrexplLdexplF128>,
+       LibcallImpls<(add frexpf128, ldexpf128), isGNUEnvironmentOrOSWindowsExceptCygwinMinGW>,
        DefaultRuntimeLibcallImpls_f80,
        LibmHasExp10F32, LibmHasExp10F64, LibmHasExp10F80,
        LibcallImpls<(add MostPowI), isNotOSMSVCRT>,
