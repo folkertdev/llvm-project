@@ -1896,8 +1896,13 @@ defvar LibmHasLdexpF80 = LibcallImpls<(add ldexpl_f80), isNotOSWindowsOrIsCygwin
 defvar LibmHasFrexpF128 = LibcallImpls<(add frexpl_f128), isNotOSWindowsOrIsCygwinMinGW>;
 defvar LibmHasLdexpF128 = LibcallImpls<(add ldexpl_f128), isNotOSWindowsOrIsCygwinMinGW>;
 
-defvar LibmHasFrexpF128MSVC = LibcallImpls<(add frexpf128), isOSWindowsExceptCygwinMinGW>;
-defvar LibmHasLdexpF128MSVC = LibcallImpls<(add ldexpf128), isOSWindowsExceptCygwinMinGW>;
+// Windows-MSVC has no f128 libm (long double == double there), so the base *l
+// impls would silently call the wrong (double-precision) function. Use the
+// f128-suffixed variants instead: they aren't in the CRT, so an unlowered f128
+// libm call becomes a link error rather than a miscompile.
+defvar WinF128Libcalls =
+  LibcallImpls<(add LibmF128Libcalls, LibmF128FiniteLibcalls),
+               isOSWindowsExceptCygwinMinGW>;
 
 defvar has__stack_chk_fail = LibcallImpls<(add __stack_chk_fail), hasStackChkFail>;
 defvar has__stack_chk_guard =
@@ -2014,7 +2019,7 @@ def AArch64SystemLibrary : SystemRuntimeLibrary<
        LibcallImpls<(add __powisf2, __powidf2), isNotOSMSVCRT>,
        LibmHasFrexpF32, LibmHasLdexpF32,
        LibmHasFrexpF128, LibmHasLdexpF128,
-       LibmHasFrexpF128MSVC, LibmHasLdexpF128MSVC,
+       WinF128Libcalls,
        AArch64LibcallImpls,
        LibcallImpls<(add Int128RTLibcalls), isAArch64_ILP64>,
        LibcallImpls<(add bzero), isOSDarwin>,
@@ -2509,7 +2514,7 @@ def ARMSystemLibrary
            LibcallImpls<(add __powisf2, __powidf2), isNotOSMSVCRT>,
            LibmHasFrexpF32, LibmHasLdexpF32,
            LibmHasFrexpF128, LibmHasLdexpF128,
-           LibmHasFrexpF128MSVC, LibmHasLdexpF128MSVC,
+           WinF128Libcalls,
            WindowARMDivRemCalls,
            WindowARMFPIntCasts,
            SecurityCheckCookieIfWinMSVC,
@@ -3225,16 +3230,12 @@ def hasExpFrexplLdexplF128
 def isGNUEnvironmentOrOSWindowsExceptCygwinMinGW
   : RuntimeLibcallPredicate<"TT.isGNUEnvironment() || (TT.isOSWindows() && !TT.isOSCygMing())">;
 
-// Use the f128 variants of math functions on x86
+// Use the f128 variants of math functions on x86. glibc provides them; on
+// Windows-MSVC they don't exist (long double == double, so the base *l impls
+// would silently miscompile f128), so emitting the f128-suffixed name turns an
+// unlowerable call into a link error instead.
 defvar X86_F128_Libcalls =
-  LibcallImpls<(add (sub LibmF128Libcalls, frexpf128, ldexpf128),
-                    LibmF128FiniteLibcalls), isGNUEnvironment>;
-
-// ldexpf128/frexpf128 don't exist in the MSVC CRT, but emitting them (turning an
-// unlowerable f128 ldexp/frexp into a link error) is preferable to calling the
-// wrong ldexpl/frexpl, which operate on double-precision long double.
-defvar X86_LdexpFrexp_F128_Libcalls =
-  LibcallImpls<(add frexpf128, ldexpf128),
+  LibcallImpls<(add LibmF128Libcalls, LibmF128FiniteLibcalls),
                isGNUEnvironmentOrOSWindowsExceptCygwinMinGW>;
 
 defvar SinCosF32F64Libcalls = LibcallImpls<(add sincosf, sincos), hasSinCos_f32_f64>;
@@ -3245,7 +3246,6 @@ defvar X86CommonLibcalls =
   (add (sub WinDefaultLibcallImpls, WindowsDivRemMulLibcallOverrides, MemChkLibcalls),
        DarwinSinCosStret, DarwinExp10, DarwinMemsetPattern, MacOSUnlockedIO,
        X86_F128_Libcalls,
-       X86_LdexpFrexp_F128_Libcalls,
        LibmHasSinCosF80, // FIXME: Depends on long double
        SinCosF32F64Libcalls,
        LibcallImpls<(add __bzero), darwinHas__bzero>,
