@@ -547,7 +547,8 @@ std::unique_ptr<TargetCodeGenInfo>
 createAIXTargetCodeGenInfo(CodeGenModule &CGM, bool Is64Bit);
 
 std::unique_ptr<TargetCodeGenInfo>
-createPPC32TargetCodeGenInfo(CodeGenModule &CGM, bool SoftFloatABI);
+createPPC32TargetCodeGenInfo(CodeGenModule &CGM, bool SoftFloatABI,
+                             bool ComplexInGPRABI);
 
 std::unique_ptr<TargetCodeGenInfo>
 createPPC64TargetCodeGenInfo(CodeGenModule &CGM);

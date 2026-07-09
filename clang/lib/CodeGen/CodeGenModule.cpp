@@ -192,12 +192,14 @@ createTargetCodeGenInfo(CodeGenModule &CGM) {
 
     bool IsSoftFloat =
         CodeGenOpts.FloatABI == "soft" || Target.hasFeature("spe");
-    return createPPC32TargetCodeGenInfo(CGM, IsSoftFloat);
+    bool ComplexInGPR = Target.hasFeature("complex-in-gpr");
+    return createPPC32TargetCodeGenInfo(CGM, IsSoftFloat, ComplexInGPR);
   }
   case llvm::Triple::ppcle: {
     bool IsSoftFloat =
         CodeGenOpts.FloatABI == "soft" || Target.hasFeature("spe");
-    return createPPC32TargetCodeGenInfo(CGM, IsSoftFloat);
+    bool ComplexInGPR = Target.hasFeature("complex-in-gpr");
+    return createPPC32TargetCodeGenInfo(CGM, IsSoftFloat, ComplexInGPR);
   }
   case llvm::Triple::ppc64:
     if (Triple.isOSAIX())

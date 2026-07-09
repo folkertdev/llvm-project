@@ -48,6 +48,20 @@ void ppc::getPPCTargetFeatures(const Driver &D, const llvm::Triple &Triple,
   if (FloatABI == ppc::FloatABI::Soft)
     Features.push_back("-hard-float");
 
+  // The GNU ppc32 ELF ABI passes and returns complex values in GPRs. This is
+  // enabled by -fcomplex-ppc-gnu-abi and is the default for GNU targets. It is
+  // only valid for 32-bit ELF PowerPC.
+  if (Arg *A = Args.getLastArg(options::OPT_fcomplex_ppc_gnu_abi)) {
+    if (!Triple.isPPC32() || !Triple.isOSBinFormatELF())
+      D.Diag(diag::err_drv_unsupported_opt_for_target)
+          << A->getSpelling() << Triple.str();
+    else
+      Features.push_back("+complex-in-gpr");
+  } else if (Triple.isPPC32() && Triple.isGNUEnvironment() &&
+             Triple.isOSBinFormatELF()) {
+    Features.push_back("+complex-in-gpr");
+  }
+
   ppc::ReadGOTPtrMode ReadGOT = ppc::getPPCReadGOTPtrMode(D, Triple, Args);
   if (ReadGOT == ppc::ReadGOTPtrMode::SecurePlt)
     Features.push_back("+secure-plt");

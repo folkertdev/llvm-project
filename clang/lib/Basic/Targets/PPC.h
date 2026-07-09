@@ -73,6 +73,8 @@ class LLVM_LIBRARY_VISIBILITY PPCTargetInfo : public TargetInfo {
   bool HasPCRelativeMemops = false;
   bool HasQuadwordAtomics = false;
   bool UseLongCalls = false;
+  // Pass and return complex values in GPRs to match the GNU ppc32 ABI.
+  bool HasComplexInGPR = false;
 
 protected:
   std::string ABI;

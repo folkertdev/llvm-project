@@ -82,6 +82,8 @@ bool PPCTargetInfo::handleTargetFeatures(std::vector<std::string> &Features,
       HasQuadwordAtomics = true;
     } else if (Feature == "+longcall") {
       UseLongCalls = true;
+    } else if (Feature == "+complex-in-gpr") {
+      HasComplexInGPR = true;
     }
     // TODO: Finish this list and add an assert that we've handled them
     // all.
@@ -622,6 +624,7 @@ bool PPCTargetInfo::hasFeature(StringRef Feature) const {
       .Case("rop-protect", HasROPProtect)
       .Case("quadword-atomics", HasQuadwordAtomics)
       .Case("longcall", UseLongCalls)
+      .Case("complex-in-gpr", HasComplexInGPR)
       .Default(false);
 }
 

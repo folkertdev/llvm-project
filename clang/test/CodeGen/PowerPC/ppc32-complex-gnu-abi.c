@@ -2,7 +2,7 @@
 
 // RUN: %clang_cc1 -triple powerpc-unknown-linux-unknown \
 // RUN:   -emit-llvm %s -o - | FileCheck %s --check-prefix=CHECK-DEF
-// RUN: %clang_cc1 -triple powerpc-unknown-linux-unknown -fcomplex-ppc-gnu-abi \
+// RUN: %clang_cc1 -triple powerpc-unknown-linux-unknown -target-feature +complex-in-gpr \
 // RUN:   -emit-llvm %s -o - | FileCheck %s --check-prefix=CHECK-GNU
 
 // CHECK-DEF-LABEL: define dso_local void @_cfloat

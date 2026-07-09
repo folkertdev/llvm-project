@@ -256,8 +256,6 @@ VALUE_CODEGENOPT(MCDCMaxTVs, 32, 0x7FFFFFFE, Benign) ///< MC/DC Maximum test vec
 
 /// If -fpcc-struct-return or -freg-struct-return is specified.
 ENUM_CODEGENOPT(StructReturnConvention, StructReturnConventionKind, 2, SRCK_Default, Benign)
-/// If -fcomplex-ppc-gnu-abi is specified on ppc32.
-ENUM_CODEGENOPT(ComplexInRegABI, ComplexArgumentConventionKind, 2, CMPLX_OnStack, Benign)
 
 CODEGENOPT(RelaxAll          , 1, 0, Benign) ///< Relax all machine code instructions.
 CODEGENOPT(RelaxedAliasing   , 1, 0, Benign) ///< Set when -fno-strict-aliasing is enabled.

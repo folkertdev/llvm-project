@@ -93,6 +93,12 @@ def FeatureSPE       : SubtargetFeature<"spe","HasSPE", "true",
 def FeatureEFPU2 : SubtargetFeature<"efpu2", "HasEFPU2", "true",
                                         "Enable Embedded Floating-Point APU 2 instructions",
                                         [FeatureSPE]>;
+// This is an ABI marker consumed by the Clang frontend (32-bit ELF): it does
+// not affect instruction selection, but records that complex values are passed
+// and returned in GPRs to match the GNU ABI. See ATR-PASS-COMPLEX-IN-GPRS.
+def FeatureComplexInGPR : SubtargetFeature<"complex-in-gpr", "HasComplexInGPR",
+                                        "true",
+                                        "Pass and return complex values in GPRs (GNU ppc32 ABI)">;
 def FeatureMFOCRF    : SubtargetFeature<"mfocrf","HasMFOCRF", "true",
                                         "Enable the MFOCRF instruction">;
 def FeatureFSqrt     : SubtargetFeature<"fsqrt","HasFSQRT", "true",

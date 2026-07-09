@@ -3049,7 +3049,8 @@ def ffp_contract : Joined<["-"], "ffp-contract=">, Group<f_Group>,
   HelpText<"Form fused FP ops (e.g. FMAs)">,
   Values<"fast,on,off,fast-honor-pragmas">;
 
-def fcomplex_ppc_gnu_abi : Flag<["-"], "fcomplex-ppc-gnu-abi">, Group<f_Group>, Visibility<[ClangOption, CC1Option]>,
+def fcomplex_ppc_gnu_abi : Flag<["-"], "fcomplex-ppc-gnu-abi">, Group<f_Group>,
+  Visibility<[ClangOption]>,
   DocBrief<"Follow the GNU ABI, pass Complex values in GPRs instead of the stack for PowerPC-32">,
   HelpText<"Pass Complex values in GPR instead of stack for PowerPC-32">;
 

@@ -129,12 +129,6 @@ public:
     SRCK_InRegs    // Small structs in registers (-freg-struct-return).
   };
 
-  enum ComplexArgumentConventionKind {
-    CMPLX_OnStack,
-    CMPLX_InGPR, // If -fcomplex-ppc-gnu-abi is specified on ppc32
-    CMPLX_InFPR
-  };
-
   enum EmbedBitcodeKind {
     Embed_Off,      // No embedded bitcode.
     Embed_All,      // Embed both bitcode and commandline in the output.
