@@ -578,9 +578,11 @@ RValue PPC32_SVR4_ABIInfo::EmitVAArg(CodeGenFunction &CGF, Address VAList,
   }
 
   const unsigned OverflowLimit = 8;
-  if (const ComplexType *CTy = Ty->getAs<ComplexType>()) {
-    // TODO: Implement this. For now ignore.
-    (void)CTy;
+
+  if (Ty->isAnyComplexType() && !isComplexGnuABI()) {
+    // The pre-Clang-22 ABI passed _Complex indirectly, but va_arg was never
+    // implemented for it (and cannot easily be, since nothing records the
+    // pointee).  Keep ignoring it.
     return RValue::getAggregate(Address::invalid()); // FIXME?
   }
 
@@ -592,13 +594,43 @@ RValue PPC32_SVR4_ABIInfo::EmitVAArg(CodeGenFunction &CGF, Address VAList,
   //   void *reg_save_area;
   // };
 
-  bool isI64 = Ty->isIntegerType() && getContext().getTypeSize(Ty) == 64;
-  bool isInt = !Ty->isFloatingType();
-  bool isF64 = Ty->isFloatingType() && getContext().getTypeSize(Ty) == 64;
+  // Describe how the argument occupies registers and the overflow area:
+  //  - isInt selects the GPR (vs FPR) register file,
+  //  - isIndirect means a pointer is passed instead of the value,
+  //  - RegCount is how many registers of that file the value occupies,
+  //  - NeedsEvenAlign forces it to start on a doubleword-aligned register pair,
+  //  - OverflowAlign is its alignment in the overflow area.
+  bool isInt, isIndirect;
+  unsigned RegCount;
+  bool NeedsEvenAlign;
+  CharUnits OverflowAlign;
 
-  // All aggregates are passed indirectly?  That doesn't seem consistent
-  // with the argument-lowering code.
-  bool isIndirect = isAggregateTypeForABI(Ty);
+  if (Ty->isAnyComplexType()) {
+    // A _Complex is passed by value in consecutive GPRs, laid out exactly as
+    // classifyComplexType coerces it; derive its footprint from that same type
+    // so va_arg and argument passing stay in lock-step.  (_Complex float is a
+    // "floating" type but is still passed in GPRs, hence not via isInt below.)
+    const llvm::DataLayout &DL = getDataLayout();
+    llvm::Type *CoerceTy = classifyComplexType(Ty).getCoerceToType();
+    OverflowAlign =
+        CharUnits::fromQuantity(DL.getABITypeAlign(CoerceTy).value());
+    isInt = true;
+    isIndirect = false;
+    RegCount = (DL.getTypeAllocSize(CoerceTy) + GPRBits / 8 - 1) / (GPRBits / 8);
+    // An 8-byte coerce type (e.g. <2 x i32> for _Complex float) is doubleword
+    // aligned and starts on an even GPR pair.
+    NeedsEvenAlign = OverflowAlign.getQuantity() >= GPRBits / 4;
+  } else {
+    bool isI64 = Ty->isIntegerType() && getContext().getTypeSize(Ty) == 64;
+    bool isF64 = Ty->isFloatingType() && getContext().getTypeSize(Ty) == 64;
+    isInt = !Ty->isFloatingType();
+    // All aggregates are passed indirectly?  That doesn't seem consistent
+    // with the argument-lowering code.
+    isIndirect = isAggregateTypeForABI(Ty);
+    NeedsEvenAlign = isI64 || (isF64 && IsSoftFloatABI);
+    RegCount = NeedsEvenAlign ? 2 : 1;
+    OverflowAlign = getContext().getTypeAlignInChars(Ty);
+  }
 
   CGBuilderTy &Builder = CGF.Builder;
 
@@ -612,14 +644,18 @@ RValue PPC32_SVR4_ABIInfo::EmitVAArg(CodeGenFunction &CGF, Address VAList,
 
   llvm::Value *NumRegs = Builder.CreateLoad(NumRegsAddr, "numUsedRegs");
 
-  // "Align" the register count when TY is i64.
-  if (isI64 || (isF64 && IsSoftFloatABI)) {
+  // "Align" the register count to an even (doubleword-aligned) pair when the
+  // argument requires it.
+  if (NeedsEvenAlign) {
     NumRegs = Builder.CreateAdd(NumRegs, Builder.getInt8(1));
     NumRegs = Builder.CreateAnd(NumRegs, Builder.getInt8((uint8_t) ~1U));
   }
 
-  llvm::Value *CC =
-      Builder.CreateICmpULT(NumRegs, Builder.getInt8(OverflowLimit), "cond");
+  // The argument comes from registers iff the whole value fits, i.e.
+  // NumRegs + RegCount <= OverflowLimit.
+  llvm::Value *CC = Builder.CreateICmpULE(
+      Builder.CreateAdd(NumRegs, Builder.getInt8(RegCount)),
+      Builder.getInt8(OverflowLimit), "cond");
 
   llvm::BasicBlock *UsingRegs = CGF.createBasicBlock("using_regs");
   llvm::BasicBlock *UsingOverflow = CGF.createBasicBlock("using_overflow");
@@ -658,9 +694,7 @@ RValue PPC32_SVR4_ABIInfo::EmitVAArg(CodeGenFunction &CGF, Address VAList,
                       RegAddr.getAlignment().alignmentOfArrayElement(RegSize));
 
     // Increase the used-register count.
-    NumRegs =
-      Builder.CreateAdd(NumRegs,
-                        Builder.getInt8((isI64 || (isF64 && IsSoftFloatABI)) ? 2 : 1));
+    NumRegs = Builder.CreateAdd(NumRegs, Builder.getInt8(RegCount));
     Builder.CreateStore(NumRegs, NumRegsAddr);
 
     CGF.EmitBranch(Cont);
@@ -689,7 +723,7 @@ RValue PPC32_SVR4_ABIInfo::EmitVAArg(CodeGenFunction &CGF, Address VAList,
         Address(Builder.CreateLoad(OverflowAreaAddr, "argp.cur"), CGF.Int8Ty,
                 OverflowAreaAlign);
     // Round up address of argument to alignment
-    CharUnits Align = CGF.getContext().getTypeAlignInChars(Ty);
+    CharUnits Align = OverflowAlign;
     if (Align > OverflowAreaAlign) {
       llvm::Value *Ptr = OverflowArea.emitRawPointer(CGF);
       OverflowArea = Address(emitRoundPointerUpToAlignment(CGF, Ptr, Align),
