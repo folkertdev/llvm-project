@@ -470,6 +470,7 @@ RValue PPC32_SVR4_ABIInfo::EmitVAArg(CodeGenFunction &CGF, Address VAList,
   }
 
   const unsigned OverflowLimit = 8;
+
   if (const ComplexType *CTy = Ty->getAs<ComplexType>()) {
     // TODO: Implement this. For now ignore.
     (void)CTy;
@@ -484,34 +485,49 @@ RValue PPC32_SVR4_ABIInfo::EmitVAArg(CodeGenFunction &CGF, Address VAList,
   //   void *reg_save_area;
   // };
 
-  bool isI64 = Ty->isIntegerType() && getContext().getTypeSize(Ty) == 64;
   bool isInt = !Ty->isFloatingType();
-  bool isF64 = Ty->isFloatingType() && getContext().getTypeSize(Ty) == 64;
+  bool isIndirect = classifyArgumentType(Ty).isIndirect();
 
-  // All aggregates are passed indirectly?  That doesn't seem consistent
-  // with the argument-lowering code.
-  bool isIndirect = isAggregateTypeForABI(Ty);
+  // AltiVec vectors never go in registers.
+  bool isAltiVecVector = Ty->isVectorType() &&
+                         getContext().getTypeSize(Ty) == 128 &&
+                         getTarget().hasFeature("altivec");
 
   CGBuilderTy &Builder = CGF.Builder;
 
-  // The calling convention either uses 1-2 GPRs or 1 FPR.
+  bool UsesGPRs = isInt || IsSoftFloatABI;
   Address NumRegsAddr = Address::invalid();
-  if (isInt || IsSoftFloatABI) {
+  if (UsesGPRs) {
     NumRegsAddr = Builder.CreateStructGEP(VAList, 0, "gpr");
   } else {
     NumRegsAddr = Builder.CreateStructGEP(VAList, 1, "fpr");
   }
 
+  // GPRs are 4 bytes, FPRs are 8 bytes wide.
+  CharUnits RegSize = CharUnits::fromQuantity(UsesGPRs ? 4 : 8);
+  CharUnits ArgSize =
+      isIndirect ? CGF.getPointerSize() : getContext().getTypeSizeInChars(Ty);
+  unsigned RegsNeeded =
+      llvm::divideCeil(ArgSize.getQuantity(), RegSize.getQuantity());
+  bool MayUseRegs = !isAltiVecVector && RegsNeeded <= OverflowLimit;
+
+  // Values that take two GPRs, like long long, use an aligned register pair.
+  bool isGPRPair = UsesGPRs && RegsNeeded == 2;
+
   llvm::Value *NumRegs = Builder.CreateLoad(NumRegsAddr, "numUsedRegs");
 
-  // "Align" the register count when TY is i64.
-  if (isI64 || (isF64 && IsSoftFloatABI)) {
+  // "Align" the register count when TY is a GPR pair.
+  if (isGPRPair) {
     NumRegs = Builder.CreateAdd(NumRegs, Builder.getInt8(1));
     NumRegs = Builder.CreateAnd(NumRegs, Builder.getInt8((uint8_t) ~1U));
   }
 
-  llvm::Value *CC =
-      Builder.CreateICmpULT(NumRegs, Builder.getInt8(OverflowLimit), "cond");
+  // Values are never split between registers and the overflow area.
+  llvm::Value *CC = Builder.getFalse();
+  if (MayUseRegs) {
+    CC = Builder.CreateICmpULT(
+        NumRegs, Builder.getInt8(OverflowLimit - RegsNeeded + 1), "cond");
+  }
 
   llvm::BasicBlock *UsingRegs = CGF.createBasicBlock("using_regs");
   llvm::BasicBlock *UsingOverflow = CGF.createBasicBlock("using_overflow");
@@ -534,14 +550,13 @@ RValue PPC32_SVR4_ABIInfo::EmitVAArg(CodeGenFunction &CGF, Address VAList,
     assert(RegAddr.getElementType() == CGF.Int8Ty);
 
     // Floating-point registers start after the general-purpose registers.
-    if (!(isInt || IsSoftFloatABI)) {
+    if (!UsesGPRs) {
       RegAddr = Builder.CreateConstInBoundsByteGEP(RegAddr,
                                                    CharUnits::fromQuantity(32));
     }
 
     // Get the address of the saved value by scaling the number of
     // registers we've used by the number of
-    CharUnits RegSize = CharUnits::fromQuantity((isInt || IsSoftFloatABI) ? 4 : 8);
     llvm::Value *RegOffset =
         Builder.CreateMul(NumRegs, Builder.getInt8(RegSize.getQuantity()));
     RegAddr = Address(Builder.CreateInBoundsGEP(
@@ -550,9 +565,7 @@ RValue PPC32_SVR4_ABIInfo::EmitVAArg(CodeGenFunction &CGF, Address VAList,
                       RegAddr.getAlignment().alignmentOfArrayElement(RegSize));
 
     // Increase the used-register count.
-    NumRegs =
-      Builder.CreateAdd(NumRegs,
-                        Builder.getInt8((isI64 || (isF64 && IsSoftFloatABI)) ? 2 : 1));
+    NumRegs = Builder.CreateAdd(NumRegs, Builder.getInt8(RegsNeeded));
     Builder.CreateStore(NumRegs, NumRegsAddr);
 
     CGF.EmitBranch(Cont);
@@ -563,7 +576,11 @@ RValue PPC32_SVR4_ABIInfo::EmitVAArg(CodeGenFunction &CGF, Address VAList,
   {
     CGF.EmitBlock(UsingOverflow);
 
-    Builder.CreateStore(Builder.getInt8(OverflowLimit), NumRegsAddr);
+    // If we got here, the registers have been exhausted: remember that for
+    // subsequent calls. AltiVec vectors are always in the overflow area,
+    // so they say nothing about the registers.
+    if (!isAltiVecVector)
+      Builder.CreateStore(Builder.getInt8(OverflowLimit), NumRegsAddr);
 
     // Everything in the overflow area is rounded up to a size of at least 4.
     CharUnits OverflowAreaAlign = CharUnits::fromQuantity(4);
@@ -581,7 +598,11 @@ RValue PPC32_SVR4_ABIInfo::EmitVAArg(CodeGenFunction &CGF, Address VAList,
         Address(Builder.CreateLoad(OverflowAreaAddr, "argp.cur"), CGF.Int8Ty,
                 OverflowAreaAlign);
     // Round up address of argument to alignment
-    CharUnits Align = CGF.getContext().getTypeAlignInChars(Ty);
+    CharUnits Align = OverflowAreaAlign;
+    if (isAltiVecVector)
+      Align = CharUnits::fromQuantity(16);
+    else if (isGPRPair || (!UsesGPRs && ArgSize.getQuantity() >= 8))
+      Align = CharUnits::fromQuantity(8);
     if (Align > OverflowAreaAlign) {
       llvm::Value *Ptr = OverflowArea.emitRawPointer(CGF);
       OverflowArea = Address(emitRoundPointerUpToAlignment(CGF, Ptr, Align),
