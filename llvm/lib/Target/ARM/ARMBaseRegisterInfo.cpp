@@ -260,6 +260,15 @@ getReservedRegs(const MachineFunction &MF) const {
 
 bool ARMBaseRegisterInfo::
 isAsmClobberable(const MachineFunction &MF, MCRegister PhysReg) const {
+  // D16-D31 are only reserved because they don't exist without d32, but a
+  // function without d32 can be inlined into a function with d32. Hence, it's
+  // reasonable for frontends to clobber these registers regardless of the
+  // available features.
+  const ARMSubtarget &STI = MF.getSubtarget<ARMSubtarget>();
+  if (!STI.hasD32())
+    for (unsigned R = 0; R < 16; ++R)
+      if (regsOverlap(PhysReg, ARM::D16 + R))
+        return true;
   return !getReservedRegs(MF).test(PhysReg);
 }
 
