@@ -865,9 +865,6 @@ Instruction *InstCombinerImpl::foldAddWithConstant(BinaryOperator &Add) {
   if (!match(Op1, m_ImmConstant(Op1C)))
     return nullptr;
 
-  if (Instruction *NV = foldBinOpIntoSelectOrPhi(Add))
-    return NV;
-
   if (Instruction *FoldedLogic = foldBinOpSelectBinOp(Add))
     return FoldedLogic;
 
@@ -1611,6 +1608,9 @@ Instruction *InstCombinerImpl::visitAdd(BinaryOperator &I) {
 
   if (Instruction *R = factorizeMathWithShlOps(I, Builder))
     return R;
+
+  if (Instruction *NV = foldBinOpIntoSelectOrPhi(I))
+    return NV;
 
   if (Instruction *X = foldAddWithConstant(I))
     return X;

@@ -570,6 +570,31 @@ define i32 @OrSelectIcmpNonZero(i32 %a, i32 %b) {
   ret i32 %or
 }
 
+define i32 @AddSelectIcmpZero(i32 %a, i32 %b) {
+; CHECK-LABEL: @AddSelectIcmpZero(
+; CHECK-NEXT:    [[CMP:%.*]] = icmp eq i32 [[A:%.*]], 0
+; CHECK-NEXT:    [[ADD:%.*]] = select i1 [[CMP]], i32 [[B:%.*]], i32 [[A]]
+; CHECK-NEXT:    ret i32 [[ADD]]
+;
+  %cmp = icmp eq i32 %a, 0
+  %sel = select i1 %cmp, i32 %b, i32 0
+  %add = add i32 %sel, %a
+  ret i32 %add
+}
+
+define i32 @AddSelectIcmpNonZero(i32 %a, i32 %b) {
+; CHECK-LABEL: @AddSelectIcmpNonZero(
+; CHECK-NEXT:    [[CMP:%.*]] = icmp eq i32 [[A:%.*]], 0
+; CHECK-NEXT:    [[SEL:%.*]] = select i1 [[CMP]], i32 [[B:%.*]], i32 42
+; CHECK-NEXT:    [[ADD:%.*]] = add i32 [[SEL]], [[A]]
+; CHECK-NEXT:    ret i32 [[ADD]]
+;
+  %cmp = icmp eq i32 %a, 0
+  %sel = select i1 %cmp, i32 %b, i32 42
+  %add = add i32 %sel, %a
+  ret i32 %add
+}
+
 define i8 @BinOpSelectBinOpMultiUseRegsWithSelect1(i8 %arg0, i8 %arg1, i1 %whatToReturn) {
 ; CHECK-LABEL: @BinOpSelectBinOpMultiUseRegsWithSelect1(
 ; CHECK-NEXT:    [[V0:%.*]] = icmp eq i8 [[ARG1:%.*]], -1

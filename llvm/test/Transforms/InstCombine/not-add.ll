@@ -145,10 +145,10 @@ define i32 @pr50308(i1 %c1, i32 %v1, i32 %v2, i32 %v3) {
 ; CHECK:       cond.true:
 ; CHECK-NEXT:    [[TMP0:%.*]] = sub i32 -2, [[V1:%.*]]
 ; CHECK-NEXT:    [[ADD1_NEG:%.*]] = xor i32 [[TMP0]], [[V2:%.*]]
+; CHECK-NEXT:    [[TMP1:%.*]] = add i32 [[V3:%.*]], [[ADD1_NEG]]
 ; CHECK-NEXT:    br label [[COND_END]]
 ; CHECK:       cond.end:
-; CHECK-NEXT:    [[COND_NEG:%.*]] = phi i32 [ [[ADD1_NEG]], [[COND_TRUE]] ], [ 0, [[ENTRY:%.*]] ]
-; CHECK-NEXT:    [[SUB:%.*]] = add i32 [[COND_NEG]], [[V3:%.*]]
+; CHECK-NEXT:    [[SUB:%.*]] = phi i32 [ [[TMP1]], [[COND_TRUE]] ], [ [[V3]], [[ENTRY:%.*]] ]
 ; CHECK-NEXT:    ret i32 [[SUB]]
 ;
 entry:

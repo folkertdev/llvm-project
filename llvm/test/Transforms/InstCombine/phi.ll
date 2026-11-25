@@ -413,11 +413,10 @@ define i32 @test_phi_load_volatile_non_speculatable(ptr %A, ptr %B, ptr %X) {
 ; CHECK:       bb1:
 ; CHECK-NEXT:    [[D:%.*]] = load volatile i32, ptr [[A]], align 4
 ; CHECK-NEXT:    [[Y:%.*]] = load i32, ptr [[X:%.*]], align 4
+; CHECK-NEXT:    [[TMP0:%.*]] = add i32 [[D]], [[Y]]
 ; CHECK-NEXT:    br label [[BB2]]
 ; CHECK:       bb2:
-; CHECK-NEXT:    [[E:%.*]] = phi i32 [ [[C]], [[BB]] ], [ [[D]], [[BB1]] ]
-; CHECK-NEXT:    [[F:%.*]] = phi i32 [ 0, [[BB]] ], [ [[Y]], [[BB1]] ]
-; CHECK-NEXT:    [[G:%.*]] = add i32 [[E]], [[F]]
+; CHECK-NEXT:    [[G:%.*]] = phi i32 [ [[C]], [[BB]] ], [ [[TMP0]], [[BB1]] ]
 ; CHECK-NEXT:    ret i32 [[G]]
 ;
 entry:
