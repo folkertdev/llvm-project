@@ -653,3 +653,573 @@ define void @bfloat_store(ptr %a, bfloat %b, bfloat %c) nounwind {
   store bfloat %1, ptr %2
   ret void
 }
+
+define void @bfloat_to_i16_in_branch(bfloat %a, i1 %c, ptr %p) nounwind {
+; RV32I-ILP32-LABEL: bfloat_to_i16_in_branch:
+; RV32I-ILP32:       # %bb.0: # %entry
+; RV32I-ILP32-NEXT:    andi a1, a1, 1
+; RV32I-ILP32-NEXT:    beqz a1, .LBB9_2
+; RV32I-ILP32-NEXT:  # %bb.1: # %bitcast
+; RV32I-ILP32-NEXT:    sh a0, 0(a2)
+; RV32I-ILP32-NEXT:  .LBB9_2: # %exit
+; RV32I-ILP32-NEXT:    ret
+;
+; RV64I-LP64-LABEL: bfloat_to_i16_in_branch:
+; RV64I-LP64:       # %bb.0: # %entry
+; RV64I-LP64-NEXT:    andi a1, a1, 1
+; RV64I-LP64-NEXT:    beqz a1, .LBB9_2
+; RV64I-LP64-NEXT:  # %bb.1: # %bitcast
+; RV64I-LP64-NEXT:    sh a0, 0(a2)
+; RV64I-LP64-NEXT:  .LBB9_2: # %exit
+; RV64I-LP64-NEXT:    ret
+;
+; RV32ID-ILP32-LABEL: bfloat_to_i16_in_branch:
+; RV32ID-ILP32:       # %bb.0: # %entry
+; RV32ID-ILP32-NEXT:    andi a1, a1, 1
+; RV32ID-ILP32-NEXT:    beqz a1, .LBB9_2
+; RV32ID-ILP32-NEXT:  # %bb.1: # %bitcast
+; RV32ID-ILP32-NEXT:    slli a0, a0, 16
+; RV32ID-ILP32-NEXT:    fmv.w.x fa5, a0
+; RV32ID-ILP32-NEXT:    fmv.x.w a0, fa5
+; RV32ID-ILP32-NEXT:    srli a0, a0, 16
+; RV32ID-ILP32-NEXT:    sh a0, 0(a2)
+; RV32ID-ILP32-NEXT:  .LBB9_2: # %exit
+; RV32ID-ILP32-NEXT:    ret
+;
+; RV64ID-LP64-LABEL: bfloat_to_i16_in_branch:
+; RV64ID-LP64:       # %bb.0: # %entry
+; RV64ID-LP64-NEXT:    andi a1, a1, 1
+; RV64ID-LP64-NEXT:    beqz a1, .LBB9_2
+; RV64ID-LP64-NEXT:  # %bb.1: # %bitcast
+; RV64ID-LP64-NEXT:    slli a0, a0, 16
+; RV64ID-LP64-NEXT:    fmv.w.x fa5, a0
+; RV64ID-LP64-NEXT:    fmv.x.w a0, fa5
+; RV64ID-LP64-NEXT:    srli a0, a0, 16
+; RV64ID-LP64-NEXT:    sh a0, 0(a2)
+; RV64ID-LP64-NEXT:  .LBB9_2: # %exit
+; RV64ID-LP64-NEXT:    ret
+;
+; RV32ID-ILP32D-LABEL: bfloat_to_i16_in_branch:
+; RV32ID-ILP32D:       # %bb.0: # %entry
+; RV32ID-ILP32D-NEXT:    andi a0, a0, 1
+; RV32ID-ILP32D-NEXT:    beqz a0, .LBB9_2
+; RV32ID-ILP32D-NEXT:  # %bb.1: # %bitcast
+; RV32ID-ILP32D-NEXT:    fmv.x.w a0, fa0
+; RV32ID-ILP32D-NEXT:    slli a0, a0, 16
+; RV32ID-ILP32D-NEXT:    fmv.w.x fa5, a0
+; RV32ID-ILP32D-NEXT:    fmv.x.w a0, fa5
+; RV32ID-ILP32D-NEXT:    srli a0, a0, 16
+; RV32ID-ILP32D-NEXT:    sh a0, 0(a1)
+; RV32ID-ILP32D-NEXT:  .LBB9_2: # %exit
+; RV32ID-ILP32D-NEXT:    ret
+;
+; RV64ID-LP64D-LABEL: bfloat_to_i16_in_branch:
+; RV64ID-LP64D:       # %bb.0: # %entry
+; RV64ID-LP64D-NEXT:    andi a0, a0, 1
+; RV64ID-LP64D-NEXT:    beqz a0, .LBB9_2
+; RV64ID-LP64D-NEXT:  # %bb.1: # %bitcast
+; RV64ID-LP64D-NEXT:    fmv.x.w a0, fa0
+; RV64ID-LP64D-NEXT:    slli a0, a0, 16
+; RV64ID-LP64D-NEXT:    fmv.w.x fa5, a0
+; RV64ID-LP64D-NEXT:    fmv.x.w a0, fa5
+; RV64ID-LP64D-NEXT:    srli a0, a0, 16
+; RV64ID-LP64D-NEXT:    sh a0, 0(a1)
+; RV64ID-LP64D-NEXT:  .LBB9_2: # %exit
+; RV64ID-LP64D-NEXT:    ret
+entry:
+  br i1 %c, label %bitcast, label %exit
+bitcast:
+  %b = bitcast bfloat %a to i16
+  store i16 %b, ptr %p
+  br label %exit
+exit:
+  ret void
+}
+
+define void @extract_vector2_bf(<2 x bfloat> %a, ptr %p) nounwind {
+; RV32I-ILP32-LABEL: extract_vector2_bf:
+; RV32I-ILP32:       # %bb.0:
+; RV32I-ILP32-NEXT:    sh a1, 0(a2)
+; RV32I-ILP32-NEXT:    ret
+;
+; RV64I-LP64-LABEL: extract_vector2_bf:
+; RV64I-LP64:       # %bb.0:
+; RV64I-LP64-NEXT:    sh a1, 0(a2)
+; RV64I-LP64-NEXT:    ret
+;
+; RV32ID-ILP32-LABEL: extract_vector2_bf:
+; RV32ID-ILP32:       # %bb.0:
+; RV32ID-ILP32-NEXT:    sh a1, 0(a2)
+; RV32ID-ILP32-NEXT:    ret
+;
+; RV64ID-LP64-LABEL: extract_vector2_bf:
+; RV64ID-LP64:       # %bb.0:
+; RV64ID-LP64-NEXT:    sh a1, 0(a2)
+; RV64ID-LP64-NEXT:    ret
+;
+; RV32ID-ILP32D-LABEL: extract_vector2_bf:
+; RV32ID-ILP32D:       # %bb.0:
+; RV32ID-ILP32D-NEXT:    fmv.x.w a1, fa1
+; RV32ID-ILP32D-NEXT:    sh a1, 0(a0)
+; RV32ID-ILP32D-NEXT:    ret
+;
+; RV64ID-LP64D-LABEL: extract_vector2_bf:
+; RV64ID-LP64D:       # %bb.0:
+; RV64ID-LP64D-NEXT:    fmv.x.w a1, fa1
+; RV64ID-LP64D-NEXT:    sh a1, 0(a0)
+; RV64ID-LP64D-NEXT:    ret
+  %e = extractelement <2 x bfloat> %a, i32 1
+  store bfloat %e, ptr %p
+  ret void
+}
+
+define void @extract_vector8_bf(<8 x bfloat> %a, ptr %p) nounwind {
+; RV32I-ILP32-LABEL: extract_vector8_bf:
+; RV32I-ILP32:       # %bb.0:
+; RV32I-ILP32-NEXT:    lw a0, 28(a0)
+; RV32I-ILP32-NEXT:    sh a0, 0(a1)
+; RV32I-ILP32-NEXT:    ret
+;
+; RV64I-LP64-LABEL: extract_vector8_bf:
+; RV64I-LP64:       # %bb.0:
+; RV64I-LP64-NEXT:    ld a0, 56(a0)
+; RV64I-LP64-NEXT:    sh a0, 0(a1)
+; RV64I-LP64-NEXT:    ret
+;
+; RV32ID-ILP32-LABEL: extract_vector8_bf:
+; RV32ID-ILP32:       # %bb.0:
+; RV32ID-ILP32-NEXT:    lw a0, 0(sp)
+; RV32ID-ILP32-NEXT:    sh a7, 0(a0)
+; RV32ID-ILP32-NEXT:    ret
+;
+; RV64ID-LP64-LABEL: extract_vector8_bf:
+; RV64ID-LP64:       # %bb.0:
+; RV64ID-LP64-NEXT:    ld a0, 0(sp)
+; RV64ID-LP64-NEXT:    sh a7, 0(a0)
+; RV64ID-LP64-NEXT:    ret
+;
+; RV32ID-ILP32D-LABEL: extract_vector8_bf:
+; RV32ID-ILP32D:       # %bb.0:
+; RV32ID-ILP32D-NEXT:    fmv.x.w a1, fa7
+; RV32ID-ILP32D-NEXT:    sh a1, 0(a0)
+; RV32ID-ILP32D-NEXT:    ret
+;
+; RV64ID-LP64D-LABEL: extract_vector8_bf:
+; RV64ID-LP64D:       # %bb.0:
+; RV64ID-LP64D-NEXT:    fmv.x.w a1, fa7
+; RV64ID-LP64D-NEXT:    sh a1, 0(a0)
+; RV64ID-LP64D-NEXT:    ret
+  %e = extractelement <8 x bfloat> %a, i32 7
+  store bfloat %e, ptr %p
+  ret void
+}
+
+define <2 x bfloat> @identity_vector2_bf(float %ignored, <2 x bfloat> %a) nounwind {
+; RV32I-ILP32-LABEL: identity_vector2_bf:
+; RV32I-ILP32:       # %bb.0:
+; RV32I-ILP32-NEXT:    mv a0, a1
+; RV32I-ILP32-NEXT:    mv a1, a2
+; RV32I-ILP32-NEXT:    ret
+;
+; RV64I-LP64-LABEL: identity_vector2_bf:
+; RV64I-LP64:       # %bb.0:
+; RV64I-LP64-NEXT:    mv a0, a1
+; RV64I-LP64-NEXT:    mv a1, a2
+; RV64I-LP64-NEXT:    ret
+;
+; RV32ID-ILP32-LABEL: identity_vector2_bf:
+; RV32ID-ILP32:       # %bb.0:
+; RV32ID-ILP32-NEXT:    lui a3, 1048560
+; RV32ID-ILP32-NEXT:    or a0, a1, a3
+; RV32ID-ILP32-NEXT:    or a1, a2, a3
+; RV32ID-ILP32-NEXT:    ret
+;
+; RV64ID-LP64-LABEL: identity_vector2_bf:
+; RV64ID-LP64:       # %bb.0:
+; RV64ID-LP64-NEXT:    lui a3, 1048560
+; RV64ID-LP64-NEXT:    or a0, a1, a3
+; RV64ID-LP64-NEXT:    or a1, a2, a3
+; RV64ID-LP64-NEXT:    ret
+;
+; RV32ID-ILP32D-LABEL: identity_vector2_bf:
+; RV32ID-ILP32D:       # %bb.0:
+; RV32ID-ILP32D-NEXT:    fmv.x.w a0, fa2
+; RV32ID-ILP32D-NEXT:    fmv.x.w a1, fa1
+; RV32ID-ILP32D-NEXT:    lui a2, 1048560
+; RV32ID-ILP32D-NEXT:    or a1, a1, a2
+; RV32ID-ILP32D-NEXT:    or a0, a0, a2
+; RV32ID-ILP32D-NEXT:    fmv.w.x fa0, a1
+; RV32ID-ILP32D-NEXT:    fmv.w.x fa1, a0
+; RV32ID-ILP32D-NEXT:    ret
+;
+; RV64ID-LP64D-LABEL: identity_vector2_bf:
+; RV64ID-LP64D:       # %bb.0:
+; RV64ID-LP64D-NEXT:    fmv.x.w a0, fa2
+; RV64ID-LP64D-NEXT:    fmv.x.w a1, fa1
+; RV64ID-LP64D-NEXT:    lui a2, 1048560
+; RV64ID-LP64D-NEXT:    or a1, a1, a2
+; RV64ID-LP64D-NEXT:    or a0, a0, a2
+; RV64ID-LP64D-NEXT:    fmv.w.x fa0, a1
+; RV64ID-LP64D-NEXT:    fmv.w.x fa1, a0
+; RV64ID-LP64D-NEXT:    ret
+  ret <2 x bfloat> %a
+}
+
+define <3 x bfloat> @identity_vector3_bf(float %ignored, <3 x bfloat> %a) nounwind {
+; RV32I-ILP32-LABEL: identity_vector3_bf:
+; RV32I-ILP32:       # %bb.0:
+; RV32I-ILP32-NEXT:    lh a1, 4(a2)
+; RV32I-ILP32-NEXT:    lhu a3, 0(a2)
+; RV32I-ILP32-NEXT:    lh a2, 8(a2)
+; RV32I-ILP32-NEXT:    slli a1, a1, 16
+; RV32I-ILP32-NEXT:    or a1, a3, a1
+; RV32I-ILP32-NEXT:    sh a2, 4(a0)
+; RV32I-ILP32-NEXT:    sw a1, 0(a0)
+; RV32I-ILP32-NEXT:    ret
+;
+; RV64I-LP64-LABEL: identity_vector3_bf:
+; RV64I-LP64:       # %bb.0:
+; RV64I-LP64-NEXT:    lh a1, 8(a2)
+; RV64I-LP64-NEXT:    lhu a3, 0(a2)
+; RV64I-LP64-NEXT:    lh a2, 16(a2)
+; RV64I-LP64-NEXT:    slli a1, a1, 16
+; RV64I-LP64-NEXT:    or a1, a3, a1
+; RV64I-LP64-NEXT:    sh a2, 4(a0)
+; RV64I-LP64-NEXT:    sw a1, 0(a0)
+; RV64I-LP64-NEXT:    ret
+;
+; RV32ID-ILP32-LABEL: identity_vector3_bf:
+; RV32ID-ILP32:       # %bb.0:
+; RV32ID-ILP32-NEXT:    slli a2, a2, 16
+; RV32ID-ILP32-NEXT:    slli a3, a3, 16
+; RV32ID-ILP32-NEXT:    srli a2, a2, 16
+; RV32ID-ILP32-NEXT:    or a2, a2, a3
+; RV32ID-ILP32-NEXT:    sh a4, 4(a0)
+; RV32ID-ILP32-NEXT:    sw a2, 0(a0)
+; RV32ID-ILP32-NEXT:    ret
+;
+; RV64ID-LP64-LABEL: identity_vector3_bf:
+; RV64ID-LP64:       # %bb.0:
+; RV64ID-LP64-NEXT:    slli a2, a2, 48
+; RV64ID-LP64-NEXT:    slli a3, a3, 16
+; RV64ID-LP64-NEXT:    srli a2, a2, 48
+; RV64ID-LP64-NEXT:    or a2, a2, a3
+; RV64ID-LP64-NEXT:    sh a4, 4(a0)
+; RV64ID-LP64-NEXT:    sw a2, 0(a0)
+; RV64ID-LP64-NEXT:    ret
+;
+; RV32ID-ILP32D-LABEL: identity_vector3_bf:
+; RV32ID-ILP32D:       # %bb.0:
+; RV32ID-ILP32D-NEXT:    fmv.x.w a1, fa1
+; RV32ID-ILP32D-NEXT:    fmv.x.w a2, fa2
+; RV32ID-ILP32D-NEXT:    fmv.x.w a3, fa3
+; RV32ID-ILP32D-NEXT:    slli a1, a1, 16
+; RV32ID-ILP32D-NEXT:    slli a2, a2, 16
+; RV32ID-ILP32D-NEXT:    srli a1, a1, 16
+; RV32ID-ILP32D-NEXT:    or a1, a1, a2
+; RV32ID-ILP32D-NEXT:    sh a3, 4(a0)
+; RV32ID-ILP32D-NEXT:    sw a1, 0(a0)
+; RV32ID-ILP32D-NEXT:    ret
+;
+; RV64ID-LP64D-LABEL: identity_vector3_bf:
+; RV64ID-LP64D:       # %bb.0:
+; RV64ID-LP64D-NEXT:    fmv.x.w a1, fa1
+; RV64ID-LP64D-NEXT:    fmv.x.w a2, fa2
+; RV64ID-LP64D-NEXT:    fmv.x.w a3, fa3
+; RV64ID-LP64D-NEXT:    slli a1, a1, 48
+; RV64ID-LP64D-NEXT:    slli a2, a2, 16
+; RV64ID-LP64D-NEXT:    srli a1, a1, 48
+; RV64ID-LP64D-NEXT:    or a1, a1, a2
+; RV64ID-LP64D-NEXT:    sh a3, 4(a0)
+; RV64ID-LP64D-NEXT:    sw a1, 0(a0)
+; RV64ID-LP64D-NEXT:    ret
+  ret <3 x bfloat> %a
+}
+
+define <4 x bfloat> @identity_vector4_bf(float %ignored, <4 x bfloat> %a) nounwind {
+; RV32I-ILP32-LABEL: identity_vector4_bf:
+; RV32I-ILP32:       # %bb.0:
+; RV32I-ILP32-NEXT:    lh a1, 8(a2)
+; RV32I-ILP32-NEXT:    lh a3, 12(a2)
+; RV32I-ILP32-NEXT:    lh a4, 0(a2)
+; RV32I-ILP32-NEXT:    lh a2, 4(a2)
+; RV32I-ILP32-NEXT:    sh a1, 4(a0)
+; RV32I-ILP32-NEXT:    sh a3, 6(a0)
+; RV32I-ILP32-NEXT:    sh a2, 2(a0)
+; RV32I-ILP32-NEXT:    sh a4, 0(a0)
+; RV32I-ILP32-NEXT:    ret
+;
+; RV64I-LP64-LABEL: identity_vector4_bf:
+; RV64I-LP64:       # %bb.0:
+; RV64I-LP64-NEXT:    lh a1, 16(a2)
+; RV64I-LP64-NEXT:    lh a3, 24(a2)
+; RV64I-LP64-NEXT:    lh a4, 0(a2)
+; RV64I-LP64-NEXT:    lh a2, 8(a2)
+; RV64I-LP64-NEXT:    sh a1, 4(a0)
+; RV64I-LP64-NEXT:    sh a3, 6(a0)
+; RV64I-LP64-NEXT:    sh a2, 2(a0)
+; RV64I-LP64-NEXT:    sh a4, 0(a0)
+; RV64I-LP64-NEXT:    ret
+;
+; RV32ID-ILP32-LABEL: identity_vector4_bf:
+; RV32ID-ILP32:       # %bb.0:
+; RV32ID-ILP32-NEXT:    sh a4, 4(a0)
+; RV32ID-ILP32-NEXT:    sh a5, 6(a0)
+; RV32ID-ILP32-NEXT:    sh a3, 2(a0)
+; RV32ID-ILP32-NEXT:    sh a2, 0(a0)
+; RV32ID-ILP32-NEXT:    ret
+;
+; RV64ID-LP64-LABEL: identity_vector4_bf:
+; RV64ID-LP64:       # %bb.0:
+; RV64ID-LP64-NEXT:    sh a4, 4(a0)
+; RV64ID-LP64-NEXT:    sh a5, 6(a0)
+; RV64ID-LP64-NEXT:    sh a3, 2(a0)
+; RV64ID-LP64-NEXT:    sh a2, 0(a0)
+; RV64ID-LP64-NEXT:    ret
+;
+; RV32ID-ILP32D-LABEL: identity_vector4_bf:
+; RV32ID-ILP32D:       # %bb.0:
+; RV32ID-ILP32D-NEXT:    fmv.x.w a1, fa3
+; RV32ID-ILP32D-NEXT:    fmv.x.w a2, fa4
+; RV32ID-ILP32D-NEXT:    fmv.x.w a3, fa1
+; RV32ID-ILP32D-NEXT:    fmv.x.w a4, fa2
+; RV32ID-ILP32D-NEXT:    sh a1, 4(a0)
+; RV32ID-ILP32D-NEXT:    sh a2, 6(a0)
+; RV32ID-ILP32D-NEXT:    sh a4, 2(a0)
+; RV32ID-ILP32D-NEXT:    sh a3, 0(a0)
+; RV32ID-ILP32D-NEXT:    ret
+;
+; RV64ID-LP64D-LABEL: identity_vector4_bf:
+; RV64ID-LP64D:       # %bb.0:
+; RV64ID-LP64D-NEXT:    fmv.x.w a1, fa3
+; RV64ID-LP64D-NEXT:    fmv.x.w a2, fa4
+; RV64ID-LP64D-NEXT:    fmv.x.w a3, fa1
+; RV64ID-LP64D-NEXT:    fmv.x.w a4, fa2
+; RV64ID-LP64D-NEXT:    sh a1, 4(a0)
+; RV64ID-LP64D-NEXT:    sh a2, 6(a0)
+; RV64ID-LP64D-NEXT:    sh a4, 2(a0)
+; RV64ID-LP64D-NEXT:    sh a3, 0(a0)
+; RV64ID-LP64D-NEXT:    ret
+  ret <4 x bfloat> %a
+}
+
+define <5 x bfloat> @identity_vector5_bf(float %ignored, <5 x bfloat> %a) nounwind {
+; RV32I-ILP32-LABEL: identity_vector5_bf:
+; RV32I-ILP32:       # %bb.0:
+; RV32I-ILP32-NEXT:    lh a1, 4(a2)
+; RV32I-ILP32-NEXT:    lhu a3, 0(a2)
+; RV32I-ILP32-NEXT:    lh a4, 12(a2)
+; RV32I-ILP32-NEXT:    lhu a5, 8(a2)
+; RV32I-ILP32-NEXT:    lh a2, 16(a2)
+; RV32I-ILP32-NEXT:    slli a1, a1, 16
+; RV32I-ILP32-NEXT:    or a1, a3, a1
+; RV32I-ILP32-NEXT:    slli a4, a4, 16
+; RV32I-ILP32-NEXT:    or a4, a5, a4
+; RV32I-ILP32-NEXT:    sh a2, 8(a0)
+; RV32I-ILP32-NEXT:    sw a4, 4(a0)
+; RV32I-ILP32-NEXT:    sw a1, 0(a0)
+; RV32I-ILP32-NEXT:    ret
+;
+; RV64I-LP64-LABEL: identity_vector5_bf:
+; RV64I-LP64:       # %bb.0:
+; RV64I-LP64-NEXT:    lh a1, 8(a2)
+; RV64I-LP64-NEXT:    lhu a3, 0(a2)
+; RV64I-LP64-NEXT:    lhu a4, 16(a2)
+; RV64I-LP64-NEXT:    lh a5, 24(a2)
+; RV64I-LP64-NEXT:    slli a1, a1, 16
+; RV64I-LP64-NEXT:    or a1, a3, a1
+; RV64I-LP64-NEXT:    slli a4, a4, 32
+; RV64I-LP64-NEXT:    lh a2, 32(a2)
+; RV64I-LP64-NEXT:    slli a5, a5, 48
+; RV64I-LP64-NEXT:    slli a1, a1, 32
+; RV64I-LP64-NEXT:    or a4, a5, a4
+; RV64I-LP64-NEXT:    srli a1, a1, 32
+; RV64I-LP64-NEXT:    or a1, a1, a4
+; RV64I-LP64-NEXT:    sh a2, 8(a0)
+; RV64I-LP64-NEXT:    sd a1, 0(a0)
+; RV64I-LP64-NEXT:    ret
+;
+; RV32ID-ILP32-LABEL: identity_vector5_bf:
+; RV32ID-ILP32:       # %bb.0:
+; RV32ID-ILP32-NEXT:    lui a1, 16
+; RV32ID-ILP32-NEXT:    addi a1, a1, -1
+; RV32ID-ILP32-NEXT:    and a2, a2, a1
+; RV32ID-ILP32-NEXT:    slli a3, a3, 16
+; RV32ID-ILP32-NEXT:    or a2, a2, a3
+; RV32ID-ILP32-NEXT:    and a1, a4, a1
+; RV32ID-ILP32-NEXT:    slli a5, a5, 16
+; RV32ID-ILP32-NEXT:    or a1, a1, a5
+; RV32ID-ILP32-NEXT:    sh a6, 8(a0)
+; RV32ID-ILP32-NEXT:    sw a1, 4(a0)
+; RV32ID-ILP32-NEXT:    sw a2, 0(a0)
+; RV32ID-ILP32-NEXT:    ret
+;
+; RV64ID-LP64-LABEL: identity_vector5_bf:
+; RV64ID-LP64:       # %bb.0:
+; RV64ID-LP64-NEXT:    slli a5, a5, 48
+; RV64ID-LP64-NEXT:    slli a2, a2, 48
+; RV64ID-LP64-NEXT:    slli a3, a3, 16
+; RV64ID-LP64-NEXT:    srli a2, a2, 48
+; RV64ID-LP64-NEXT:    slli a4, a4, 48
+; RV64ID-LP64-NEXT:    or a2, a2, a3
+; RV64ID-LP64-NEXT:    srli a4, a4, 16
+; RV64ID-LP64-NEXT:    slli a2, a2, 32
+; RV64ID-LP64-NEXT:    or a4, a5, a4
+; RV64ID-LP64-NEXT:    srli a2, a2, 32
+; RV64ID-LP64-NEXT:    or a2, a2, a4
+; RV64ID-LP64-NEXT:    sh a6, 8(a0)
+; RV64ID-LP64-NEXT:    sd a2, 0(a0)
+; RV64ID-LP64-NEXT:    ret
+;
+; RV32ID-ILP32D-LABEL: identity_vector5_bf:
+; RV32ID-ILP32D:       # %bb.0:
+; RV32ID-ILP32D-NEXT:    fmv.x.w a1, fa1
+; RV32ID-ILP32D-NEXT:    fmv.x.w a2, fa2
+; RV32ID-ILP32D-NEXT:    fmv.x.w a3, fa3
+; RV32ID-ILP32D-NEXT:    fmv.x.w a4, fa4
+; RV32ID-ILP32D-NEXT:    fmv.x.w a5, fa5
+; RV32ID-ILP32D-NEXT:    lui a6, 16
+; RV32ID-ILP32D-NEXT:    addi a6, a6, -1
+; RV32ID-ILP32D-NEXT:    and a1, a1, a6
+; RV32ID-ILP32D-NEXT:    and a3, a3, a6
+; RV32ID-ILP32D-NEXT:    slli a2, a2, 16
+; RV32ID-ILP32D-NEXT:    or a1, a1, a2
+; RV32ID-ILP32D-NEXT:    slli a4, a4, 16
+; RV32ID-ILP32D-NEXT:    or a3, a3, a4
+; RV32ID-ILP32D-NEXT:    sh a5, 8(a0)
+; RV32ID-ILP32D-NEXT:    sw a3, 4(a0)
+; RV32ID-ILP32D-NEXT:    sw a1, 0(a0)
+; RV32ID-ILP32D-NEXT:    ret
+;
+; RV64ID-LP64D-LABEL: identity_vector5_bf:
+; RV64ID-LP64D:       # %bb.0:
+; RV64ID-LP64D-NEXT:    fmv.x.w a1, fa1
+; RV64ID-LP64D-NEXT:    fmv.x.w a2, fa2
+; RV64ID-LP64D-NEXT:    fmv.x.w a3, fa4
+; RV64ID-LP64D-NEXT:    fmv.x.w a4, fa3
+; RV64ID-LP64D-NEXT:    fmv.x.w a5, fa5
+; RV64ID-LP64D-NEXT:    slli a1, a1, 48
+; RV64ID-LP64D-NEXT:    slli a2, a2, 16
+; RV64ID-LP64D-NEXT:    srli a1, a1, 48
+; RV64ID-LP64D-NEXT:    or a1, a1, a2
+; RV64ID-LP64D-NEXT:    slli a3, a3, 48
+; RV64ID-LP64D-NEXT:    slli a4, a4, 48
+; RV64ID-LP64D-NEXT:    srli a4, a4, 16
+; RV64ID-LP64D-NEXT:    slli a1, a1, 32
+; RV64ID-LP64D-NEXT:    or a3, a3, a4
+; RV64ID-LP64D-NEXT:    srli a1, a1, 32
+; RV64ID-LP64D-NEXT:    or a1, a1, a3
+; RV64ID-LP64D-NEXT:    sh a5, 8(a0)
+; RV64ID-LP64D-NEXT:    sd a1, 0(a0)
+; RV64ID-LP64D-NEXT:    ret
+  ret <5 x bfloat> %a
+}
+
+define <8 x bfloat> @identity_vector8_bf(float %ignored, <8 x bfloat> %a) nounwind {
+; RV32I-ILP32-LABEL: identity_vector8_bf:
+; RV32I-ILP32:       # %bb.0:
+; RV32I-ILP32-NEXT:    lh a1, 24(a2)
+; RV32I-ILP32-NEXT:    lh a3, 28(a2)
+; RV32I-ILP32-NEXT:    lh a4, 8(a2)
+; RV32I-ILP32-NEXT:    lh a5, 12(a2)
+; RV32I-ILP32-NEXT:    lh a6, 16(a2)
+; RV32I-ILP32-NEXT:    lh a7, 20(a2)
+; RV32I-ILP32-NEXT:    lh t0, 0(a2)
+; RV32I-ILP32-NEXT:    lh a2, 4(a2)
+; RV32I-ILP32-NEXT:    sh a1, 12(a0)
+; RV32I-ILP32-NEXT:    sh a3, 14(a0)
+; RV32I-ILP32-NEXT:    sh a4, 4(a0)
+; RV32I-ILP32-NEXT:    sh a5, 6(a0)
+; RV32I-ILP32-NEXT:    sh a6, 8(a0)
+; RV32I-ILP32-NEXT:    sh a7, 10(a0)
+; RV32I-ILP32-NEXT:    sh a2, 2(a0)
+; RV32I-ILP32-NEXT:    sh t0, 0(a0)
+; RV32I-ILP32-NEXT:    ret
+;
+; RV64I-LP64-LABEL: identity_vector8_bf:
+; RV64I-LP64:       # %bb.0:
+; RV64I-LP64-NEXT:    lh a1, 48(a2)
+; RV64I-LP64-NEXT:    lh a3, 56(a2)
+; RV64I-LP64-NEXT:    lh a4, 16(a2)
+; RV64I-LP64-NEXT:    lh a5, 24(a2)
+; RV64I-LP64-NEXT:    lh a6, 32(a2)
+; RV64I-LP64-NEXT:    lh a7, 40(a2)
+; RV64I-LP64-NEXT:    lh t0, 0(a2)
+; RV64I-LP64-NEXT:    lh a2, 8(a2)
+; RV64I-LP64-NEXT:    sh a1, 12(a0)
+; RV64I-LP64-NEXT:    sh a3, 14(a0)
+; RV64I-LP64-NEXT:    sh a4, 4(a0)
+; RV64I-LP64-NEXT:    sh a5, 6(a0)
+; RV64I-LP64-NEXT:    sh a6, 8(a0)
+; RV64I-LP64-NEXT:    sh a7, 10(a0)
+; RV64I-LP64-NEXT:    sh a2, 2(a0)
+; RV64I-LP64-NEXT:    sh t0, 0(a0)
+; RV64I-LP64-NEXT:    ret
+;
+; RV32ID-ILP32-LABEL: identity_vector8_bf:
+; RV32ID-ILP32:       # %bb.0:
+; RV32ID-ILP32-NEXT:    lh a1, 0(sp)
+; RV32ID-ILP32-NEXT:    lh t0, 4(sp)
+; RV32ID-ILP32-NEXT:    sh a1, 12(a0)
+; RV32ID-ILP32-NEXT:    sh t0, 14(a0)
+; RV32ID-ILP32-NEXT:    sh a4, 4(a0)
+; RV32ID-ILP32-NEXT:    sh a5, 6(a0)
+; RV32ID-ILP32-NEXT:    sh a6, 8(a0)
+; RV32ID-ILP32-NEXT:    sh a7, 10(a0)
+; RV32ID-ILP32-NEXT:    sh a3, 2(a0)
+; RV32ID-ILP32-NEXT:    sh a2, 0(a0)
+; RV32ID-ILP32-NEXT:    ret
+;
+; RV64ID-LP64-LABEL: identity_vector8_bf:
+; RV64ID-LP64:       # %bb.0:
+; RV64ID-LP64-NEXT:    lh a1, 0(sp)
+; RV64ID-LP64-NEXT:    lh t0, 8(sp)
+; RV64ID-LP64-NEXT:    sh a1, 12(a0)
+; RV64ID-LP64-NEXT:    sh t0, 14(a0)
+; RV64ID-LP64-NEXT:    sh a4, 4(a0)
+; RV64ID-LP64-NEXT:    sh a5, 6(a0)
+; RV64ID-LP64-NEXT:    sh a6, 8(a0)
+; RV64ID-LP64-NEXT:    sh a7, 10(a0)
+; RV64ID-LP64-NEXT:    sh a3, 2(a0)
+; RV64ID-LP64-NEXT:    sh a2, 0(a0)
+; RV64ID-LP64-NEXT:    ret
+;
+; RV32ID-ILP32D-LABEL: identity_vector8_bf:
+; RV32ID-ILP32D:       # %bb.0:
+; RV32ID-ILP32D-NEXT:    fmv.x.w a2, fa7
+; RV32ID-ILP32D-NEXT:    fmv.x.w a3, fa3
+; RV32ID-ILP32D-NEXT:    fmv.x.w a4, fa4
+; RV32ID-ILP32D-NEXT:    fmv.x.w a5, fa5
+; RV32ID-ILP32D-NEXT:    fmv.x.w a6, fa6
+; RV32ID-ILP32D-NEXT:    fmv.x.w a7, fa1
+; RV32ID-ILP32D-NEXT:    fmv.x.w t0, fa2
+; RV32ID-ILP32D-NEXT:    sh a2, 12(a0)
+; RV32ID-ILP32D-NEXT:    sh a1, 14(a0)
+; RV32ID-ILP32D-NEXT:    sh a3, 4(a0)
+; RV32ID-ILP32D-NEXT:    sh a4, 6(a0)
+; RV32ID-ILP32D-NEXT:    sh a5, 8(a0)
+; RV32ID-ILP32D-NEXT:    sh a6, 10(a0)
+; RV32ID-ILP32D-NEXT:    sh t0, 2(a0)
+; RV32ID-ILP32D-NEXT:    sh a7, 0(a0)
+; RV32ID-ILP32D-NEXT:    ret
+;
+; RV64ID-LP64D-LABEL: identity_vector8_bf:
+; RV64ID-LP64D:       # %bb.0:
+; RV64ID-LP64D-NEXT:    fmv.x.w a2, fa7
+; RV64ID-LP64D-NEXT:    fmv.x.w a3, fa3
+; RV64ID-LP64D-NEXT:    fmv.x.w a4, fa4
+; RV64ID-LP64D-NEXT:    fmv.x.w a5, fa5
+; RV64ID-LP64D-NEXT:    fmv.x.w a6, fa6
+; RV64ID-LP64D-NEXT:    fmv.x.w a7, fa1
+; RV64ID-LP64D-NEXT:    fmv.x.w t0, fa2
+; RV64ID-LP64D-NEXT:    sh a2, 12(a0)
+; RV64ID-LP64D-NEXT:    sh a1, 14(a0)
+; RV64ID-LP64D-NEXT:    sh a3, 4(a0)
+; RV64ID-LP64D-NEXT:    sh a4, 6(a0)
+; RV64ID-LP64D-NEXT:    sh a5, 8(a0)
+; RV64ID-LP64D-NEXT:    sh a6, 10(a0)
+; RV64ID-LP64D-NEXT:    sh t0, 2(a0)
+; RV64ID-LP64D-NEXT:    sh a7, 0(a0)
+; RV64ID-LP64D-NEXT:    ret
+  ret <8 x bfloat> %a
+}

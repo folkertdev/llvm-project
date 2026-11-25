@@ -1046,3 +1046,131 @@ define void @bfloat_store(ptr %a, bfloat %b, bfloat %c) nounwind {
   store bfloat %1, ptr %2
   ret void
 }
+
+define void @bfloat_to_i16_in_branch(bfloat %a, i1 %c, ptr %p) nounwind {
+; LA32-LABEL: bfloat_to_i16_in_branch:
+; LA32:       # %bb.0: # %entry
+; LA32-NEXT:    andi $a1, $a1, 1
+; LA32-NEXT:    beq $a1, $zero, .LBB9_2
+; LA32-NEXT:  # %bb.1: # %bitcast
+; LA32-NEXT:    st.h $a0, $a2, 0
+; LA32-NEXT:  .LBB9_2: # %exit
+; LA32-NEXT:    ret
+;
+; LA64-LABEL: bfloat_to_i16_in_branch:
+; LA64:       # %bb.0: # %entry
+; LA64-NEXT:    andi $a0, $a0, 1
+; LA64-NEXT:    beqz $a0, .LBB9_2
+; LA64-NEXT:  # %bb.1: # %bitcast
+; LA64-NEXT:    movfr2gr.s $a0, $fa0
+; LA64-NEXT:    slli.d $a0, $a0, 16
+; LA64-NEXT:    movgr2fr.w $fa0, $a0
+; LA64-NEXT:    movfr2gr.s $a0, $fa0
+; LA64-NEXT:    srli.d $a0, $a0, 16
+; LA64-NEXT:    st.h $a0, $a1, 0
+; LA64-NEXT:  .LBB9_2: # %exit
+; LA64-NEXT:    ret
+;
+; LA32F-ILP32S-LABEL: bfloat_to_i16_in_branch:
+; LA32F-ILP32S:       # %bb.0: # %entry
+; LA32F-ILP32S-NEXT:    andi $a1, $a1, 1
+; LA32F-ILP32S-NEXT:    beq $a1, $zero, .LBB9_2
+; LA32F-ILP32S-NEXT:  # %bb.1: # %bitcast
+; LA32F-ILP32S-NEXT:    slli.w $a0, $a0, 16
+; LA32F-ILP32S-NEXT:    movgr2fr.w $fa0, $a0
+; LA32F-ILP32S-NEXT:    movfr2gr.s $a0, $fa0
+; LA32F-ILP32S-NEXT:    srli.w $a0, $a0, 16
+; LA32F-ILP32S-NEXT:    st.h $a0, $a2, 0
+; LA32F-ILP32S-NEXT:  .LBB9_2: # %exit
+; LA32F-ILP32S-NEXT:    ret
+;
+; LA32F-ILP32D-LABEL: bfloat_to_i16_in_branch:
+; LA32F-ILP32D:       # %bb.0: # %entry
+; LA32F-ILP32D-NEXT:    andi $a0, $a0, 1
+; LA32F-ILP32D-NEXT:    beq $a0, $zero, .LBB9_2
+; LA32F-ILP32D-NEXT:  # %bb.1: # %bitcast
+; LA32F-ILP32D-NEXT:    movfr2gr.s $a0, $fa0
+; LA32F-ILP32D-NEXT:    slli.w $a0, $a0, 16
+; LA32F-ILP32D-NEXT:    movgr2fr.w $fa0, $a0
+; LA32F-ILP32D-NEXT:    movfr2gr.s $a0, $fa0
+; LA32F-ILP32D-NEXT:    srli.w $a0, $a0, 16
+; LA32F-ILP32D-NEXT:    st.h $a0, $a1, 0
+; LA32F-ILP32D-NEXT:  .LBB9_2: # %exit
+; LA32F-ILP32D-NEXT:    ret
+;
+; LA32D-ILP32D-LABEL: bfloat_to_i16_in_branch:
+; LA32D-ILP32D:       # %bb.0: # %entry
+; LA32D-ILP32D-NEXT:    andi $a0, $a0, 1
+; LA32D-ILP32D-NEXT:    beq $a0, $zero, .LBB9_2
+; LA32D-ILP32D-NEXT:  # %bb.1: # %bitcast
+; LA32D-ILP32D-NEXT:    movfr2gr.s $a0, $fa0
+; LA32D-ILP32D-NEXT:    slli.w $a0, $a0, 16
+; LA32D-ILP32D-NEXT:    movgr2fr.w $fa0, $a0
+; LA32D-ILP32D-NEXT:    movfr2gr.s $a0, $fa0
+; LA32D-ILP32D-NEXT:    srli.w $a0, $a0, 16
+; LA32D-ILP32D-NEXT:    st.h $a0, $a1, 0
+; LA32D-ILP32D-NEXT:  .LBB9_2: # %exit
+; LA32D-ILP32D-NEXT:    ret
+;
+; LA64F-LP64S-LABEL: bfloat_to_i16_in_branch:
+; LA64F-LP64S:       # %bb.0: # %entry
+; LA64F-LP64S-NEXT:    andi $a1, $a1, 1
+; LA64F-LP64S-NEXT:    beqz $a1, .LBB9_2
+; LA64F-LP64S-NEXT:  # %bb.1: # %bitcast
+; LA64F-LP64S-NEXT:    slli.d $a0, $a0, 16
+; LA64F-LP64S-NEXT:    movgr2fr.w $fa0, $a0
+; LA64F-LP64S-NEXT:    movfr2gr.s $a0, $fa0
+; LA64F-LP64S-NEXT:    srli.d $a0, $a0, 16
+; LA64F-LP64S-NEXT:    st.h $a0, $a2, 0
+; LA64F-LP64S-NEXT:  .LBB9_2: # %exit
+; LA64F-LP64S-NEXT:    ret
+;
+; LA64F-LP64D-LABEL: bfloat_to_i16_in_branch:
+; LA64F-LP64D:       # %bb.0: # %entry
+; LA64F-LP64D-NEXT:    andi $a0, $a0, 1
+; LA64F-LP64D-NEXT:    beqz $a0, .LBB9_2
+; LA64F-LP64D-NEXT:  # %bb.1: # %bitcast
+; LA64F-LP64D-NEXT:    movfr2gr.s $a0, $fa0
+; LA64F-LP64D-NEXT:    slli.d $a0, $a0, 16
+; LA64F-LP64D-NEXT:    movgr2fr.w $fa0, $a0
+; LA64F-LP64D-NEXT:    movfr2gr.s $a0, $fa0
+; LA64F-LP64D-NEXT:    srli.d $a0, $a0, 16
+; LA64F-LP64D-NEXT:    st.h $a0, $a1, 0
+; LA64F-LP64D-NEXT:  .LBB9_2: # %exit
+; LA64F-LP64D-NEXT:    ret
+;
+; LA64D-LP64S-LABEL: bfloat_to_i16_in_branch:
+; LA64D-LP64S:       # %bb.0: # %entry
+; LA64D-LP64S-NEXT:    andi $a1, $a1, 1
+; LA64D-LP64S-NEXT:    beqz $a1, .LBB9_2
+; LA64D-LP64S-NEXT:  # %bb.1: # %bitcast
+; LA64D-LP64S-NEXT:    slli.d $a0, $a0, 16
+; LA64D-LP64S-NEXT:    movgr2fr.w $fa0, $a0
+; LA64D-LP64S-NEXT:    movfr2gr.s $a0, $fa0
+; LA64D-LP64S-NEXT:    srli.d $a0, $a0, 16
+; LA64D-LP64S-NEXT:    st.h $a0, $a2, 0
+; LA64D-LP64S-NEXT:  .LBB9_2: # %exit
+; LA64D-LP64S-NEXT:    ret
+;
+; LA64D-LP64D-LABEL: bfloat_to_i16_in_branch:
+; LA64D-LP64D:       # %bb.0: # %entry
+; LA64D-LP64D-NEXT:    andi $a0, $a0, 1
+; LA64D-LP64D-NEXT:    beqz $a0, .LBB9_2
+; LA64D-LP64D-NEXT:  # %bb.1: # %bitcast
+; LA64D-LP64D-NEXT:    movfr2gr.s $a0, $fa0
+; LA64D-LP64D-NEXT:    slli.d $a0, $a0, 16
+; LA64D-LP64D-NEXT:    movgr2fr.w $fa0, $a0
+; LA64D-LP64D-NEXT:    movfr2gr.s $a0, $fa0
+; LA64D-LP64D-NEXT:    srli.d $a0, $a0, 16
+; LA64D-LP64D-NEXT:    st.h $a0, $a1, 0
+; LA64D-LP64D-NEXT:  .LBB9_2: # %exit
+; LA64D-LP64D-NEXT:    ret
+entry:
+  br i1 %c, label %bitcast, label %exit
+bitcast:
+  %b = bitcast bfloat %a to i16
+  store i16 %b, ptr %p
+  br label %exit
+exit:
+  ret void
+}
